@@ -1,0 +1,247 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ===== BACKGROUNDS ===== */
+    --bg-primary: #FAFAF9;          /* Warm off-white - main background */
+    --bg-secondary: #FFFFFF;        /* Pure white - cards */
+    --bg-surface: #F5F5F4;          /* Stone-100 - subtle sections */
+    --bg-hover: #F0EFED;            /* Hover state */
+    --bg-sidebar: #1C1917;          /* Warm dark sidebar */
+    --bg-sidebar-hover: #292524;    /* Sidebar hover */
+
+    /* ===== PRIMARY ACCENT (Violet-Pink Gradient) ===== */
+    --accent: #8B5CF6;              /* Violet-500 */
+    --accent-secondary: #EC4899;    /* Pink-500 */
+    --accent-gradient: linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%);
+    --accent-dim: rgba(139, 92, 246, 0.1);
+    --accent-hover: #7C3AED;        /* Violet-600 */
+
+    /* ===== TEXT ===== */
+    --text-primary: #1C1917;        /* Stone-900 */
+    --text-secondary: #57534E;      /* Stone-600 */
+    --text-muted: #A8A29E;          /* Stone-400 */
+    --text-inverse: #FAFAF9;        /* For dark backgrounds */
+
+    /* ===== BORDERS ===== */
+    --border: #E7E5E4;              /* Stone-200 */
+    --border-strong: #D6D3D1;       /* Stone-300 */
+    --border-accent: rgba(139, 92, 246, 0.3);
+
+    /* ===== ROLE COLORS ===== */
+    --role-executor: #8B5CF6;       /* Violet */
+    --role-executor-bg: rgba(139, 92, 246, 0.1);
+    --role-beneficiary: #06B6D4;    /* Cyan */
+    --role-beneficiary-bg: rgba(6, 182, 212, 0.1);
+    --role-observer: #F59E0B;       /* Amber */
+    --role-observer-bg: rgba(245, 158, 11, 0.1);
+
+    /* ===== RECORD TYPE COLORS ===== */
+    --type-identity: #8B5CF6;       /* Violet */
+    --type-identity-bg: rgba(139, 92, 246, 0.1);
+    --type-financial: #10B981;      /* Emerald */
+    --type-financial-bg: rgba(16, 185, 129, 0.1);
+    --type-credentials: #F59E0B;    /* Amber */
+    --type-credentials-bg: rgba(245, 158, 11, 0.1);
+    --type-documents: #3B82F6;      /* Blue */
+    --type-documents-bg: rgba(59, 130, 246, 0.1);
+    --type-instructions: #EC4899;   /* Pink */
+    --type-instructions-bg: rgba(236, 72, 153, 0.1);
+    --type-assets: #F97316;         /* Orange */
+    --type-assets-bg: rgba(249, 115, 22, 0.1);
+
+    /* ===== CATEGORY COLORS (Personal vs Business) ===== */
+    --category-personal: #06B6D4;   /* Cyan */
+    --category-personal-bg: rgba(6, 182, 212, 0.1);
+    --category-business: #8B5CF6;   /* Violet */
+    --category-business-bg: rgba(139, 92, 246, 0.1);
+
+    /* ===== STATUS ===== */
+    --success: #10B981;             /* Emerald-500 */
+    --success-bg: rgba(16, 185, 129, 0.1);
+    --warning: #F59E0B;             /* Amber-500 */
+    --warning-bg: rgba(245, 158, 11, 0.1);
+    --error: #EF4444;               /* Red-500 */
+    --error-bg: rgba(239, 68, 68, 0.1);
+    --info: #3B82F6;                /* Blue-500 */
+    --info-bg: rgba(59, 130, 246, 0.1);
+
+    /* ===== SHADOWS ===== */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --shadow-accent: 0 4px 12px rgba(139, 92, 246, 0.25);
+
+    /* Legacy aliases for backward compatibility */
+    --primary-bg: var(--bg-primary);
+    --secondary-bg: var(--bg-secondary);
+    --bg-card: var(--bg-secondary);
+
+    /* Type badge aliases (map to new type colors) */
+    --badge-identity: var(--type-identity);
+    --badge-financial: var(--type-financial);
+    --badge-credentials: var(--type-credentials);
+    --badge-documents: var(--type-documents);
+    --badge-instructions: var(--type-instructions);
+    --badge-assets: var(--type-assets);
+
+    /* New 4-category badges */
+    --badge-wallets: #F5A623;  /* Gold */
+    --badge-accounts: var(--type-identity);  /* Violet */
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+}
+
+@layer components {
+  /* Card - Enhanced with better shadows and transitions */
+  .card {
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+    transition: all 0.2s ease;
+  }
+
+  .card:hover.hover\:shadow-md {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+    transform: translateY(-2px);
+  }
+
+  /* Buttons - Enhanced with smoother transitions */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-offset-2;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    --tw-ring-color: var(--accent);
+    --tw-ring-offset-color: var(--bg-primary);
+  }
+
+  .btn-primary {
+    @apply btn;
+    background: var(--accent-gradient);
+    color: var(--text-inverse);
+    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.15);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(139, 92, 246, 0.2);
+  }
+
+  .btn-secondary {
+    @apply btn bg-transparent;
+    border: 1.5px solid var(--border-strong);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--bg-hover);
+    border-color: var(--accent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .btn-secondary:active:not(:disabled) {
+    background-color: var(--accent-dim);
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent;
+    color: var(--text-secondary);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .btn-ghost:active:not(:disabled) {
+    background-color: var(--bg-surface);
+  }
+
+  /* Inputs - Enhanced with better focus states */
+  .input {
+    @apply w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent;
+    background-color: var(--bg-primary);
+    border: 1.5px solid var(--border);
+    color: var(--text-primary);
+    transition: all 0.15s ease;
+    --tw-ring-color: var(--accent);
+  }
+
+  .input:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
+
+  .input:focus {
+    background-color: var(--bg-secondary);
+    box-shadow: 0 0 0 4px var(--accent-dim);
+  }
+
+  .input::placeholder {
+    color: var(--text-muted);
+  }
+
+  /* Select dropdowns - Match input styling */
+  select.input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23A8A29E' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+    appearance: none;
+  }
+
+  /* Badge - Enhanced with better visual weight */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Enhanced link styles */
+  a {
+    transition: color 0.15s ease;
+  }
+
+  /* Custom scrollbar for webkit browsers */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--bg-surface);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+}

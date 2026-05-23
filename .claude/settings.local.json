@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(cat:*)",
+      "Bash(cd \"/Users/ataranto/Library/CloudStorage/Dropbox/claude-code-drop/E3tate-v1\")",
+      "Bash(echo \"=== all '/setup/' or push\\('/setup'\\) references ===\")",
+      "Bash(grep -rn \"\\\\\"/setup\\\\|'/setup\" app components --include=\"*.tsx\" --include=\"*.ts\")",
+      "Bash(echo \"\\(none besides what's shown\\)\")",
+      "Bash(echo \"\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --retry 20 --retry-delay 1 --retry-all-errors --retry-connrefused --max-time 25 http://localhost:3000__TRACKED_VAR__)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --retry 25 --retry-delay 1 --retry-all-errors --retry-connrefused --max-time 30 http://localhost:3000__TRACKED_VAR__)"
+    ]
+  }
+}
