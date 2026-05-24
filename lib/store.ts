@@ -51,7 +51,13 @@ export interface VaultRecord {
   metadata?: Record<string, any>; // also carries uploaded-file blobs: metadata.file
 }
 
-export type BeneficiaryRole = "executor" | "beneficiary" | "observer" | "contact";
+export type BeneficiaryRole =
+  | "executor"
+  | "beneficiary"
+  | "observer"
+  | "contact"
+  | "trustee"
+  | "guardian";
 export type BeneficiaryStatus = "accepted" | "confirmed" | "pending" | "draft";
 
 export interface Beneficiary {
@@ -163,7 +169,7 @@ function normalizeRecord(r: any): VaultRecord {
 
 function normalizeBeneficiary(b: any): Beneficiary {
   const role = String(b?.role ?? "beneficiary").toLowerCase();
-  const validRole = (["executor", "beneficiary", "observer", "contact"].includes(role)
+  const validRole = (["executor", "beneficiary", "observer", "contact", "trustee", "guardian"].includes(role)
     ? role
     : "beneficiary") as BeneficiaryRole;
 
@@ -597,4 +603,62 @@ export function getCheckInStatus(): CheckInStatus {
 
 export function checkIn(): AppSettings {
   return saveSettings({ lastCheckIn: new Date().toISOString() });
+}
+
+// ---------------------------------------------------------------------------
+// Liabilities — debts the executor must settle before distributing the estate.
+// A new pillar (see _refs/OVERVIEW.md §1.2). Stored under its own key.
+// ---------------------------------------------------------------------------
+
+export type LiabilityKind = "mortgage" | "loan" | "credit-card" | "tax" | "other";
+
+export interface EstateLiability {
+  id: string;
+  kind: LiabilityKind;
+  name: string;
+  lender?: string;
+  balance?: number; // current outstanding balance, in dollars
+  notes?: string;
+}
+
+const LIABILITIES_KEY = "liabilities";
+
+function seedLiabilities(): EstateLiability[] {
+  return [
+    { id: "1", kind: "mortgage", name: "Home Mortgage", lender: "Commonwealth Bank", balance: 420000 },
+    { id: "2", kind: "credit-card", name: "Visa Credit Card", lender: "Westpac", balance: 3200 },
+  ];
+}
+
+export function loadLiabilities(): EstateLiability[] {
+  if (typeof window === "undefined") return [];
+  const raw = readRaw<EstateLiability[]>(LIABILITIES_KEY);
+  if (!Array.isArray(raw)) {
+    const seed = seedLiabilities();
+    localStorage.setItem(LIABILITIES_KEY, JSON.stringify(seed));
+    return seed;
+  }
+  return raw;
+}
+
+export function saveLiabilities(items: EstateLiability[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LIABILITIES_KEY, JSON.stringify(items));
+  dispatchUpdate();
+}
+
+export function addLiability(item: EstateLiability): EstateLiability[] {
+  const updated = [...loadLiabilities(), item];
+  saveLiabilities(updated);
+  return updated;
+}
+
+export function deleteLiability(id: string): EstateLiability[] {
+  const updated = loadLiabilities().filter((l) => l.id !== id);
+  saveLiabilities(updated);
+  return updated;
+}
+
+export function getTotalLiabilities(): number {
+  return loadLiabilities().reduce((sum, l) => sum + (l.balance || 0), 0);
 }

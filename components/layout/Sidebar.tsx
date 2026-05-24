@@ -16,6 +16,7 @@ import {
   HelpCircle,
   ScrollText,
   Menu,
+  Landmark,
 } from "lucide-react";
 
 const navigation = [
@@ -23,6 +24,7 @@ const navigation = [
   { name: "My Estate", href: "/my-estate/about", icon: User },
   { name: "Will", href: "/will", icon: ScrollText },
   { name: "Vault", href: "/vault", icon: Vault },
+  { name: "Liabilities", href: "/liabilities", icon: Landmark },
   { name: "Beneficiaries", href: "/beneficiaries", icon: Users },
   { name: "Triggers", href: "/triggers", icon: Zap },
   { name: "Activity", href: "/activity", icon: History },

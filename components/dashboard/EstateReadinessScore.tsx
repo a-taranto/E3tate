@@ -2,12 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
-import { Info, TrendingUp, CheckCircle } from "lucide-react";
+import Link from "next/link";
+import { Info, TrendingUp, CheckCircle, ArrowRight } from "lucide-react";
 import {
   calculateEstateScore,
   getEstateDataFromLocalStorage,
   type ScoreResult,
 } from "@/lib/estate-score";
+
+// Where each incomplete checklist item sends the user to fix it.
+const ROUTE_BY_LABEL: Record<string, string> = {
+  "Will uploaded": "/will",
+  "Executor assigned": "/beneficiaries",
+  "Beneficiaries added": "/beneficiaries",
+  "Vault items added": "/vault",
+  "Important documents stored": "/vault",
+  "Items have beneficiaries": "/vault",
+  "Proof of life configured": "/settings",
+};
 
 export default function EstateReadinessScore() {
   const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null);
@@ -119,22 +131,15 @@ export default function EstateReadinessScore() {
           </span>
         </summary>
         <div className="mt-4 space-y-2">
-          {breakdown.map((item, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between p-3 rounded-lg"
-              style={{
-                backgroundColor: item.completed
-                  ? "var(--success-bg)"
-                  : "var(--bg-sidebar)",
-              }}
-            >
+          {breakdown.map((item, index) => {
+            const route = !item.completed ? ROUTE_BY_LABEL[item.label] : undefined;
+            const rowStyle = {
+              backgroundColor: item.completed ? "var(--success-bg)" : "var(--bg-sidebar)",
+            };
+            const left = (
               <div className="flex items-center gap-2">
                 {item.completed ? (
-                  <CheckCircle
-                    className="h-4 w-4"
-                    style={{ color: "var(--success)" }}
-                  />
+                  <CheckCircle className="h-4 w-4" style={{ color: "var(--success)" }} />
                 ) : (
                   <div
                     className="h-4 w-4 rounded-full border-2"
@@ -143,27 +148,48 @@ export default function EstateReadinessScore() {
                 )}
                 <span
                   className="text-sm"
-                  style={{
-                    color: item.completed
-                      ? "var(--text-primary)"
-                      : "var(--text-muted)",
-                  }}
+                  style={{ color: item.completed ? "var(--text-primary)" : "var(--text-muted)" }}
                 >
                   {item.label}
                 </span>
               </div>
-              <span
-                className="text-sm font-medium"
-                style={{
-                  color: item.completed
-                    ? "var(--success)"
-                    : "var(--text-muted)",
-                }}
+            );
+
+            if (route) {
+              return (
+                <Link
+                  key={index}
+                  href={route}
+                  className="flex items-center justify-between p-3 rounded-lg transition-all hover:brightness-125"
+                  style={rowStyle}
+                >
+                  {left}
+                  <span
+                    className="text-sm font-medium flex items-center gap-1"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    Fix <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </Link>
+              );
+            }
+
+            return (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 rounded-lg"
+                style={rowStyle}
               >
-                {item.points}/{item.maxPoints} pts
-              </span>
-            </div>
-          ))}
+                {left}
+                <span
+                  className="text-sm font-medium"
+                  style={{ color: item.completed ? "var(--success)" : "var(--text-muted)" }}
+                >
+                  {item.points}/{item.maxPoints} pts
+                </span>
+              </div>
+            );
+          })}
         </div>
       </details>
     </Card>

@@ -118,6 +118,14 @@ export default function BeneficiariesPage() {
       variant: "default" as const,
       description: "Trusted contact with no record access",
     },
+    trustee: {
+      variant: "info" as const,
+      description: "Holds assets in trust (e.g. for minors) until they pass on",
+    },
+    guardian: {
+      variant: "warning" as const,
+      description: "Cares for any minor children",
+    },
   };
 
   const executorCount = beneficiaries.filter(b => b.role === "executor").length;
@@ -173,6 +181,8 @@ export default function BeneficiariesPage() {
                 <option value="beneficiary">Beneficiary</option>
                 <option value="executor">Executor</option>
                 <option value="observer">Observer</option>
+                <option value="trustee">Trustee</option>
+                <option value="guardian">Guardian</option>
               </select>
             </div>
             <Input
