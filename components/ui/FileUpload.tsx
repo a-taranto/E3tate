@@ -8,12 +8,16 @@ interface FileUploadProps {
   onFilesSelected: (files: File[]) => void;
   maxFiles?: number;
   acceptedTypes?: string[];
+  accept?: string; // convenience: comma-separated accept string
+  loading?: boolean; // disables the picker while an upload is in flight
 }
 
 export default function FileUpload({
   onFilesSelected,
   maxFiles = 5,
   acceptedTypes = ["*"],
+  accept,
+  loading = false,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -85,7 +89,8 @@ export default function FileUpload({
           className="hidden"
           multiple={maxFiles > 1}
           onChange={handleFileSelect}
-          accept={acceptedTypes.join(",")}
+          accept={accept ?? acceptedTypes.join(",")}
+          disabled={loading}
         />
 
         <Upload
@@ -105,8 +110,8 @@ export default function FileUpload({
         </p>
 
         <label htmlFor="file-upload">
-          <Button variant="secondary" size="sm" type="button" onClick={() => document.getElementById('file-upload')?.click()}>
-            Browse Files
+          <Button variant="secondary" size="sm" type="button" onClick={() => { if (!loading) document.getElementById('file-upload')?.click(); }}>
+            {loading ? "Uploading…" : "Browse Files"}
           </Button>
         </label>
 

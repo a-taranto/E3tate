@@ -2,7 +2,7 @@ interface ActivityLog {
   id: string;
   timestamp: string;
   action: string;
-  category: "profile" | "vault" | "beneficiary" | "trigger" | "settings" | "system";
+  category: "profile" | "vault" | "beneficiary" | "trigger" | "settings" | "system" | "will";
   description: string;
   icon?: any;
   metadata?: {

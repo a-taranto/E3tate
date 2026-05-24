@@ -10,6 +10,7 @@ import {
   Mail,
   Users,
   Cloud,
+  Image as ImageIcon,
   Film,
   Sparkles,
   DollarSign,
@@ -23,13 +24,10 @@ const CATEGORY_ICONS: Record<ServiceCategory, any> = {
   email: Mail,
   social: Users,
   cloud: Cloud,
-  streaming: Film,
+  photos: ImageIcon,
   ai: Sparkles,
   financial: DollarSign,
   crypto: Coins,
-  shopping: ShoppingBag,
-  productivity: Sparkles,
-  gaming: Film,
 };
 
 interface ServiceSelectionGridProps {
@@ -62,13 +60,10 @@ export default function ServiceSelectionGrid({
       email: [],
       social: [],
       cloud: [],
-      streaming: [],
+      photos: [],
       ai: [],
       financial: [],
       crypto: [],
-      shopping: [],
-      productivity: [],
-      gaming: [],
     };
 
     filteredServices.forEach((service) => {

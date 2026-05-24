@@ -19,6 +19,7 @@ import {
 import DocumentViewer from "@/components/ui/DocumentViewer";
 import { VaultCard } from "@/components/vault/VaultCard";
 import { documentTypes } from "@/lib/documentConfig";
+import { loadVaultRecords, deleteVaultRecord, updateVaultRecord } from "@/lib/store";
 import {
   FileText,
   Wallet,
@@ -73,10 +74,10 @@ const recordTypeConfig = {
   },
 
   // Legacy types (for backward compatibility with existing data)
-  identity: { label: "Identity (Legacy)", icon: FileText, badgeColor: "badge-accounts", migratesTo: "accounts", isPrimary: false },
-  financial: { label: "Financial (Legacy)", icon: Key, badgeColor: "badge-credentials", migratesTo: "credentials", isPrimary: false },
-  instructions: { label: "Instructions (Legacy)", icon: FileText, badgeColor: "badge-documents", migratesTo: "documents", isPrimary: false },
-  assets: { label: "Assets (Legacy)", icon: FileText, badgeColor: "badge-documents", migratesTo: "documents", isPrimary: false },
+  identity: { label: "Identity (Legacy)", icon: FileText, badgeColor: "badge-accounts", description: "", migratesTo: "accounts", isPrimary: false },
+  financial: { label: "Financial (Legacy)", icon: Key, badgeColor: "badge-credentials", description: "", migratesTo: "credentials", isPrimary: false },
+  instructions: { label: "Instructions (Legacy)", icon: FileText, badgeColor: "badge-documents", description: "", migratesTo: "documents", isPrimary: false },
+  assets: { label: "Assets (Legacy)", icon: FileText, badgeColor: "badge-documents", description: "", migratesTo: "documents", isPrimary: false },
 };
 
 type RecordType = keyof typeof recordTypeConfig;
@@ -94,11 +95,12 @@ interface VaultRecord {
   beneficiaries: string[];
   lastModified: string;
   createdAt: string;
-  scope: string;
+  scope?: string;
   encrypted: boolean;
   fileType?: string;
   fileSize?: string;
   profileLinked?: boolean; // Indicates this record is from Profile page
+  metadata?: Record<string, any>; // carries uploaded-file blobs: metadata.file
 }
 
 // Mock beneficiaries data
@@ -118,430 +120,67 @@ export default function VaultPage() {
   const [selectedType, setSelectedType] = useState<RecordType | "all">("all");
   const [initialRecordType, setInitialRecordType] = useState<RecordType | "">("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [uploadedDocuments, setUploadedDocuments] = useState<VaultRecord[]>([]);
-  const [profileRecords, setProfileRecords] = useState<VaultRecord[]>([]);
+  const [records, setRecords] = useState<VaultRecord[]>([]);
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const [viewingDocument, setViewingDocument] = useState<{ docType: string; fileName: string; fileData: string } | null>(null);
 
-  // Load uploaded documents from localStorage
+  // Load all vault records from the unified store (seeded + migrated on boot).
   useEffect(() => {
-    const loadDocuments = () => {
-      if (typeof window !== "undefined") {
-        const savedFiles = localStorage.getItem("uploadedDocuments");
-        if (savedFiles) {
-          try {
-            const files = JSON.parse(savedFiles);
-            const documentRecords: VaultRecord[] = [];
-
-            // Document type labels mapping
-            const docTypeLabels: { [key: string]: string } = {
-              will: "Last Will and Testament",
-              insurance: "Life Insurance Policy",
-              deeds: "Property Deed",
-              birth: "Birth Certificate",
-              marriage: "Marriage Certificate",
-              passport: "Passport",
-              military: "Military Records (DD-214)",
-              other: "Other Important Document",
-            };
-
-            // Convert uploaded files to vault records
-            Object.entries(files).forEach(([docType, fileData]: [string, any]) => {
-              if (fileData && fileData.name) {
-                documentRecords.push({
-                  id: `uploaded-${docType}`,
-                  title: docTypeLabels[docType] || docType,
-                  type: "documents",
-                  description: `Uploaded from Profile: ${fileData.name}`,
-                  beneficiaries: ["All Beneficiaries"],
-                  lastModified: "Recently",
-                  createdAt: new Date().toISOString().split("T")[0],
-                  scope: "full",
-                  encrypted: true,
-                  fileType: fileData.type.split("/")[1]?.toUpperCase() || "FILE",
-                  fileSize: `${(fileData.size / 1024).toFixed(1)} KB`,
-                });
-              }
-            });
-
-            setUploadedDocuments(documentRecords);
-          } catch (e) {
-            console.error("Error loading uploaded documents:", e);
-          }
-        } else {
-          setUploadedDocuments([]);
-        }
-      }
-    };
-
-    loadDocuments();
-
-    // Listen for document upload events
-    const handleDocumentUploaded = () => {
-      loadDocuments();
-    };
-
-    window.addEventListener("storage", loadDocuments);
-    window.addEventListener("documentUploaded", handleDocumentUploaded);
-
+    const refresh = () => setRecords(loadVaultRecords());
+    refresh();
+    window.addEventListener("store-updated", refresh);
+    window.addEventListener("documentUploaded", refresh);
     return () => {
-      window.removeEventListener("storage", loadDocuments);
-      window.removeEventListener("documentUploaded", handleDocumentUploaded);
+      window.removeEventListener("store-updated", refresh);
+      window.removeEventListener("documentUploaded", refresh);
     };
   }, []);
 
-  // Handle viewing a document
+  // Handle viewing a document (reads the file blob the store keeps on the record)
   const handleViewDocument = (recordId: string) => {
-    // Find the document in uploaded documents
-    const savedFiles = localStorage.getItem("uploadedDocuments");
-    if (savedFiles) {
-      const files = JSON.parse(savedFiles);
-
-      // Extract doc type from record ID (e.g., "uploaded-will" -> "will")
-      const docType = recordId.replace("uploaded-", "");
-      const fileData = files[docType];
-
-      if (fileData) {
-        setViewingDocument({
-          docType: docType,
-          fileName: fileData.name,
-          fileData: fileData.data,
-        });
-      }
+    const rec = records.find((r) => r.id === recordId);
+    const fileData = rec?.metadata?.file;
+    if (fileData) {
+      setViewingDocument({
+        docType: recordId.replace("uploaded-", ""),
+        fileName: fileData.name,
+        fileData: fileData.data,
+      });
     }
   };
 
-  // Handle saving edited document
+  // Handle saving edited document back to the store
   const handleSaveDocument = (newContent: string) => {
     if (!viewingDocument) return;
-
-    const savedFiles = localStorage.getItem("uploadedDocuments");
-    if (savedFiles) {
-      const files = JSON.parse(savedFiles);
-
-      // Update the file data
-      files[viewingDocument.docType] = {
-        ...files[viewingDocument.docType],
-        data: newContent,
-      };
-
-      // Save back to localStorage
-      localStorage.setItem("uploadedDocuments", JSON.stringify(files));
-
-      // Dispatch event to notify other components
-      window.dispatchEvent(new CustomEvent("documentUploaded"));
-
-      // Close viewer
-      setViewingDocument(null);
-
-      // Reload documents
-      const loadEvent = new CustomEvent("documentUploaded");
-      window.dispatchEvent(loadEvent);
+    const recordId = `uploaded-${viewingDocument.docType}`;
+    const rec = records.find((r) => r.id === recordId);
+    if (rec?.metadata?.file) {
+      const updated = updateVaultRecord(recordId, {
+        metadata: { ...rec.metadata, file: { ...rec.metadata.file, data: newContent } },
+      });
+      setRecords(updated);
     }
+    setViewingDocument(null);
   };
 
-  // Handle deleting a record
+  // Handle deleting a record (single store, so every record is deletable here)
   const handleDeleteRecord = (recordId: string) => {
     if (!confirm("Are you sure you want to delete this record? This action cannot be undone.")) {
       return;
     }
-
-    // Check if it's an uploaded document
-    const savedFiles = localStorage.getItem("uploadedDocuments");
-    if (savedFiles) {
-      const files = JSON.parse(savedFiles);
-      const fileIndex = files.findIndex((f: any) => f.id === recordId);
-      if (fileIndex !== -1) {
-        // Remove from files array
-        files.splice(fileIndex, 1);
-        localStorage.setItem("uploadedDocuments", JSON.stringify(files));
-
-        // Update state
-        setUploadedDocuments(prev => prev.filter(doc => doc.id !== recordId));
-
-        // Close detail panel if this record was selected
-        if (selectedRecord?.id === recordId) {
-          setIsDetailOpen(false);
-          setSelectedRecord(null);
-        }
-
-        return;
-      }
+    setRecords(deleteVaultRecord(recordId));
+    if (selectedRecord?.id === recordId) {
+      setIsDetailOpen(false);
+      setSelectedRecord(null);
     }
-
-    // Check if it's a vault record (Will)
-    const vaultRecords = localStorage.getItem("vaultRecords");
-    if (vaultRecords) {
-      const records = JSON.parse(vaultRecords);
-      const recordIndex = records.findIndex((r: any) => r.id === recordId);
-      if (recordIndex !== -1) {
-        // Remove from records array
-        records.splice(recordIndex, 1);
-        localStorage.setItem("vaultRecords", JSON.stringify(records));
-
-        // Trigger reload
-        window.dispatchEvent(new CustomEvent("documentUploaded"));
-
-        // Close detail panel if this record was selected
-        if (selectedRecord?.id === recordId) {
-          setIsDetailOpen(false);
-          setSelectedRecord(null);
-        }
-
-        return;
-      }
-    }
-
-    // If it's a profile-linked record, we can't delete it from here
-    alert("Profile-linked records must be deleted from the Profile page.");
   };
 
-  // Load profile data (assets, accounts, identities, credentials) from localStorage
-  useEffect(() => {
-    const loadProfileData = () => {
-      if (typeof window !== "undefined") {
-        const records: VaultRecord[] = [];
+  // Profile/asset/credential records now live in the unified store; their
+  // legacy keys are absorbed by the boot migration (see lib/store.ts).
 
-        // Load Physical Assets (Home, Car, Cash)
-        const savedAssets = localStorage.getItem("profileAssets");
-        if (savedAssets) {
-          try {
-            const assets = JSON.parse(savedAssets);
-            assets.forEach((asset: any) => {
-              const assetTypeLabels: { [key: string]: string } = {
-                home: "Home/Property",
-                crypto: "Cryptocurrency",
-                car: "Vehicle",
-                cash: "Cash Holdings",
-              };
-              records.push({
-                id: `asset-${asset.id}`,
-                title: asset.name,
-                type: asset.type === "crypto" ? "financial" : "assets",
-                description: asset.description || `${assetTypeLabels[asset.type] || asset.type}${asset.value ? ` - Value: $${asset.value}` : ''}`,
-                beneficiaries: ["All Beneficiaries"],
-                lastModified: "From Profile",
-                createdAt: new Date().toISOString().split("T")[0],
-                scope: "full",
-                encrypted: true,
-                profileLinked: true,
-              });
-            });
-          } catch (e) {
-            console.error("Error loading assets:", e);
-          }
-        }
+  // Seed/mock records now come from the unified store (lib/store.ts).
 
-        // Load Financial Accounts (Bank, Super, Insurance) - WITHOUT credentials
-        const savedAccounts = localStorage.getItem("profileAccounts");
-        if (savedAccounts) {
-          try {
-            const accounts = JSON.parse(savedAccounts);
-            accounts.forEach((account: any) => {
-              // Only add if NOT a digital account (those go in credentials)
-              if (account.type !== "digital") {
-                const accountTypeLabels: { [key: string]: string } = {
-                  savings: "Savings Account",
-                  checking: "Checking/Transaction Account",
-                  credit: "Credit Card",
-                  mortgage: "Mortgage Account",
-                  offset: "Offset Account",
-                  term: "Term Deposit",
-                  investment: "Investment Account",
-                };
-                const typeLabel = account.accountType ? accountTypeLabels[account.accountType] || account.accountType : account.type;
-
-                records.push({
-                  id: `account-${account.id}`,
-                  title: account.name,
-                  type: "financial",
-                  description: `${typeLabel}${account.institution ? ` - ${account.institution}` : ''}${account.accountNumber ? ` (${account.accountNumber})` : ''}`,
-                  beneficiaries: ["All Beneficiaries"],
-                  lastModified: "From Profile",
-                  createdAt: new Date().toISOString().split("T")[0],
-                  scope: "full",
-                  encrypted: true,
-                  profileLinked: true,
-                });
-              }
-            });
-          } catch (e) {
-            console.error("Error loading accounts:", e);
-          }
-        }
-
-        // Load Credentials (from vaultCredentials - accounts with stored passwords)
-        const savedCredentials = localStorage.getItem("vaultCredentials");
-        if (savedCredentials) {
-          try {
-            const credentials = JSON.parse(savedCredentials);
-            credentials.forEach((cred: any) => {
-              records.push({
-                id: cred.id,
-                title: cred.title,
-                type: "credentials",
-                description: `${cred.institution || cred.accountType}${cred.username ? ` - ${cred.username}` : ''}`,
-                beneficiaries: ["All Beneficiaries"],
-                lastModified: "From Profile",
-                createdAt: cred.createdAt ? cred.createdAt.split("T")[0] : new Date().toISOString().split("T")[0],
-                scope: "full",
-                encrypted: true,
-                profileLinked: true,
-              });
-            });
-          } catch (e) {
-            console.error("Error loading credentials:", e);
-          }
-        }
-
-        // Load Identity Documents
-        const savedIdentities = localStorage.getItem("profileIdentities");
-        if (savedIdentities) {
-          try {
-            const identities = JSON.parse(savedIdentities);
-            identities.forEach((identity: any) => {
-              const typeLabels: { [key: string]: string } = {
-                ssn: "Social Security Number",
-                license: "Driver's License",
-                medicare: "Medicare Card",
-                passport: "Passport",
-              };
-              records.push({
-                id: `identity-${identity.id}`,
-                title: typeLabels[identity.type] || identity.type,
-                type: "identity",
-                description: `Document Number: ${identity.number}${identity.expiryDate ? ` - Expires: ${identity.expiryDate}` : ''}`,
-                beneficiaries: ["Executor Only"],
-                lastModified: "From Profile",
-                createdAt: new Date().toISOString().split("T")[0],
-                scope: "executor",
-                encrypted: true,
-                profileLinked: true,
-              });
-            });
-          } catch (e) {
-            console.error("Error loading identities:", e);
-          }
-        }
-
-        setProfileRecords(records);
-      }
-    };
-
-    loadProfileData();
-
-    // Listen for profile updates and credential updates
-    const handleCredentialsUpdate = () => {
-      loadProfileData();
-    };
-
-    window.addEventListener("storage", loadProfileData);
-    window.addEventListener("vaultCredentialsUpdated", handleCredentialsUpdate);
-
-    return () => {
-      window.removeEventListener("storage", loadProfileData);
-      window.removeEventListener("vaultCredentialsUpdated", handleCredentialsUpdate);
-    };
-  }, []);
-
-  // Mock data with documents
-  const mockRecords: VaultRecord[] = [
-    {
-      id: "1",
-      title: "Primary Bank Account",
-      type: "financial",
-      description: "Main checking account details",
-      beneficiaries: ["Sarah J.", "Michael K."],
-      lastModified: "2 hours ago",
-      createdAt: "2024-01-15",
-      scope: "full",
-      encrypted: true,
-    },
-    {
-      id: "2",
-      title: "Property Deed - 123 Main St",
-      type: "documents",
-      description: "Original deed for primary residence",
-      beneficiaries: ["Sarah J.", "Michael K.", "Emma L."],
-      lastModified: "2 weeks ago",
-      createdAt: "2024-06-15",
-      scope: "full",
-      encrypted: true,
-      fileType: "PDF",
-      fileSize: "2.4 MB",
-    },
-    {
-      id: "3",
-      title: "Birth Certificate",
-      type: "documents",
-      description: "Certified copy",
-      beneficiaries: ["Executor Only"],
-      lastModified: "3 months ago",
-      createdAt: "2024-03-10",
-      scope: "executor",
-      encrypted: true,
-      fileType: "PDF",
-      fileSize: "856 KB",
-    },
-    {
-      id: "4",
-      title: "Marriage Certificate",
-      type: "documents",
-      description: "Official marriage certificate",
-      beneficiaries: ["Sarah J."],
-      lastModified: "3 months ago",
-      createdAt: "2024-03-10",
-      scope: "specific",
-      encrypted: true,
-      fileType: "PDF",
-      fileSize: "1.1 MB",
-    },
-    {
-      id: "5",
-      title: "Social Security Card",
-      type: "identity",
-      beneficiaries: ["Executor Only"],
-      lastModified: "1 week ago",
-      createdAt: "2024-02-20",
-      scope: "executor",
-      encrypted: true,
-    },
-    {
-      id: "6",
-      title: "Investment Portfolio Access",
-      type: "credentials",
-      beneficiaries: ["Sarah J."],
-      lastModified: "5 days ago",
-      createdAt: "2024-08-05",
-      scope: "specific",
-      encrypted: true,
-    },
-    {
-      id: "7",
-      title: "Final Wishes & Arrangements",
-      type: "instructions",
-      description: "End-of-life wishes, medical directives, and final messages from Profile",
-      beneficiaries: ["All Beneficiaries"],
-      lastModified: "1 month ago",
-      createdAt: "2024-01-01",
-      scope: "full",
-      encrypted: true,
-      profileLinked: true,
-    },
-    {
-      id: "8",
-      title: "Cryptocurrency Wallets",
-      type: "assets",
-      beneficiaries: ["Sarah J."],
-      lastModified: "3 days ago",
-      createdAt: "2024-07-20",
-      scope: "specific",
-      encrypted: true,
-    },
-  ];
-
-  // Combine profile records, uploaded documents, and mock records
-  const allRecords: VaultRecord[] = [...profileRecords, ...uploadedDocuments, ...mockRecords];
+  const allRecords: VaultRecord[] = records;
 
   // Filter records
   const filteredRecords = allRecords.filter((record) => {
@@ -1091,7 +730,7 @@ export default function VaultPage() {
                   </div>
                 ))}
               </div>
-              <Button variant="secondary" size="sm" className="mt-3">
+              <Button variant="secondary" size="sm" className="mt-3" disabled title="Coming soon">
                 <Plus className="h-4 w-4" />
                 Add Beneficiary
               </Button>
@@ -1194,11 +833,19 @@ export default function VaultPage() {
                 </>
               ) : (
                 <>
-                  <Button variant="primary" className="flex-1">
+                  <Button variant="primary" className="flex-1" disabled title="Coming soon">
                     <Edit className="h-4 w-4" />
                     Edit Record
                   </Button>
-                  <Button variant="secondary">
+                  <Button
+                    variant="secondary"
+                    title="Copy record details"
+                    onClick={() =>
+                      navigator.clipboard?.writeText(
+                        `${selectedRecord.title}${selectedRecord.description ? ` — ${selectedRecord.description}` : ""}`
+                      )
+                    }
+                  >
                     <Copy className="h-4 w-4" />
                   </Button>
                   <Button

@@ -1,15 +1,17 @@
-import { ReactNode } from "react";
+import { CSSProperties, ReactNode } from "react";
 
 interface BadgeProps {
   children: ReactNode;
   variant?: "default" | "success" | "warning" | "error" | "info";
   className?: string;
+  style?: CSSProperties;
 }
 
 export default function Badge({
   children,
   variant = "default",
   className = "",
+  style,
 }: BadgeProps) {
   const getVariantStyles = () => {
     switch (variant) {
@@ -50,7 +52,7 @@ export default function Badge({
   };
 
   return (
-    <span className={`badge ${className}`} style={getVariantStyles()}>
+    <span className={`badge ${className}`} style={{ ...getVariantStyles(), ...style }}>
       {children}
     </span>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import { Card, Button, Input } from "@/components/ui";
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { WillTemplate } from "@/types";
 import { logActivity } from "@/lib/activityLogger";
+import { loadBeneficiaries, type Beneficiary } from "@/lib/store";
 
 export default function CreateWillPage() {
   const router = useRouter();
@@ -33,6 +34,11 @@ export default function CreateWillPage() {
     createdAt: new Date().toISOString(),
     lastModified: new Date().toISOString(),
   });
+
+  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+  useEffect(() => {
+    setBeneficiaries(loadBeneficiaries());
+  }, []);
 
   const steps = [
     { number: 1, title: "About You", icon: User },
@@ -266,9 +272,11 @@ export default function CreateWillPage() {
                       onChange={(e) => updateWillData("primaryExecutorId", e.target.value)}
                     >
                       <option value="">Select from beneficiaries...</option>
-                      <option value="beneficiary_1">John Smith (Spouse)</option>
-                      <option value="beneficiary_2">Sarah Johnson (Child)</option>
-                      <option value="add_new">+ Add New Executor</option>
+                      {beneficiaries.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}{b.relationship ? ` (${b.relationship})` : ""}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -281,9 +289,11 @@ export default function CreateWillPage() {
                       onChange={(e) => updateWillData("alternateExecutorId", e.target.value)}
                     >
                       <option value="">Select from beneficiaries...</option>
-                      <option value="beneficiary_1">John Smith (Spouse)</option>
-                      <option value="beneficiary_2">Sarah Johnson (Child)</option>
-                      <option value="add_new">+ Add New Executor</option>
+                      {beneficiaries.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}{b.relationship ? ` (${b.relationship})` : ""}
+                        </option>
+                      ))}
                     </select>
                     <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                       If your primary executor cannot serve, this person will take over
@@ -305,41 +315,31 @@ export default function CreateWillPage() {
                   Your "residuary estate" is everything not specifically gifted. Allocate percentages to beneficiaries (must total 100%).
                 </p>
                 <div className="space-y-3">
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                        John Smith (Spouse)
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          className="input w-20 text-center"
-                          placeholder="0"
-                          min="0"
-                          max="100"
-                        />
-                        <span className="text-sm" style={{ color: "var(--text-secondary)" }}>%</span>
+                  {beneficiaries.length === 0 && (
+                    <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                      No beneficiaries yet — add them on the Beneficiaries page first.
+                    </p>
+                  )}
+                  {beneficiaries.map((b) => (
+                    <div key={b.id} className="p-4 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                          {b.name}{b.relationship ? ` (${b.relationship})` : ""}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            className="input w-20 text-center"
+                            placeholder="0"
+                            min="0"
+                            max="100"
+                          />
+                          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>%</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                        Sarah Johnson (Child)
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          className="input w-20 text-center"
-                          placeholder="0"
-                          min="0"
-                          max="100"
-                        />
-                        <span className="text-sm" style={{ color: "var(--text-secondary)" }}>%</span>
-                      </div>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">
+                  ))}
+                  <Button variant="ghost" size="sm" disabled title="Manage beneficiaries on the Beneficiaries page">
                     + Add Beneficiary
                   </Button>
                 </div>
@@ -370,7 +370,7 @@ export default function CreateWillPage() {
                   <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
                     No specific gifts added yet
                   </p>
-                  <Button variant="primary">
+                  <Button variant="primary" disabled title="Coming soon">
                     + Add Gift from Vault
                   </Button>
                 </div>

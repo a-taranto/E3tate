@@ -13,123 +13,82 @@ import {
   CheckCircle,
   Clock,
   Users,
-  X,
   Check,
-  AlertCircle,
 } from "lucide-react";
-
-interface Beneficiary {
-  id: string | number;
-  name: string;
-  email: string;
-  role: "executor" | "beneficiary" | "observer";
-  status: "accepted" | "pending" | "draft";
-  invitedDate?: string;
-  recordsAccess?: number;
-  scopeSummary?: string;
-  relationship?: string;
-}
+import { loadBeneficiaries, saveBeneficiaries, type Beneficiary } from "@/lib/store";
 
 export default function BeneficiariesPage() {
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
-  const [pendingBeneficiaries, setPendingBeneficiaries] = useState<Beneficiary[]>([]);
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    role: "beneficiary" as Beneficiary["role"],
+    relationship: "",
+  });
 
-  // Load beneficiaries from localStorage
+  // Load beneficiaries from the unified store (seeded + migrated on app boot).
   useEffect(() => {
-    // Load existing beneficiaries
-    const saved = localStorage.getItem("beneficiariesList");
-    if (saved) {
-      setBeneficiaries(JSON.parse(saved));
-    } else {
-      // Initialize with mock data
-      const mockData = [
-        {
-          id: 1,
-          name: "Sarah Johnson",
-          email: "sarah.j@example.com",
-          role: "executor" as const,
-          status: "accepted" as const,
-          invitedDate: "3 months ago",
-          recordsAccess: 18,
-          scopeSummary: "Full vault access + execution rights",
-        },
-        {
-          id: 2,
-          name: "Michael Kim",
-          email: "michael.k@example.com",
-          role: "executor" as const,
-          status: "accepted" as const,
-          invitedDate: "2 months ago",
-          recordsAccess: 18,
-          scopeSummary: "Full vault access + execution rights",
-        },
-      ];
-      setBeneficiaries(mockData);
-      localStorage.setItem("beneficiariesList", JSON.stringify(mockData));
-    }
-
-    // Check for pending beneficiaries from profile page
-    const pending = localStorage.getItem("pendingBeneficiaries");
-    if (pending) {
-      const pendingData = JSON.parse(pending);
-      setPendingBeneficiaries(pendingData);
-      setShowConfirmation(true);
-    }
+    const refresh = () => setBeneficiaries(loadBeneficiaries());
+    refresh();
+    window.addEventListener("store-updated", refresh);
+    return () => window.removeEventListener("store-updated", refresh);
   }, []);
 
-  const updatePendingBeneficiary = (id: string, field: string, value: string) => {
-    setPendingBeneficiaries(pendingBeneficiaries.map(b =>
-      b.id === id ? { ...b, [field]: value } : b
-    ));
+  const openAdd = () => {
+    setEditingId(null);
+    setForm({ name: "", email: "", role: "beneficiary", relationship: "" });
+    setShowForm(true);
   };
 
-  const removePendingBeneficiary = (id: string) => {
-    setPendingBeneficiaries(pendingBeneficiaries.filter(b => b.id !== id));
+  const openEdit = (person: Beneficiary) => {
+    setEditingId(person.id);
+    setForm({
+      name: person.name,
+      email: person.email,
+      role: person.role,
+      relationship: person.relationship || "",
+    });
+    setShowForm(true);
   };
 
-  const confirmBeneficiaries = () => {
-    // Validate all have emails
-    const missingEmails = pendingBeneficiaries.filter(b => !b.email || !b.email.trim());
-    if (missingEmails.length > 0) {
-      alert("Please add email addresses for all beneficiaries before confirming.");
-      return;
+  const submitForm = () => {
+    if (!form.name.trim() || !form.email.trim()) return;
+    let updated: Beneficiary[];
+    if (editingId) {
+      updated = beneficiaries.map((b) => (b.id === editingId ? { ...b, ...form } : b));
+    } else {
+      const newBeneficiary: Beneficiary = {
+        id: Date.now().toString(),
+        name: form.name,
+        email: form.email,
+        role: form.role,
+        relationship: form.relationship,
+        status: "pending",
+        invitedDate: "Just now",
+        recordsAccess: 0,
+        scopeSummary: "To be configured",
+      };
+      updated = [...beneficiaries, newBeneficiary];
     }
-
-    // Add to beneficiaries list with proper status
-    const confirmedBeneficiaries = pendingBeneficiaries.map(b => ({
-      ...b,
-      status: "pending" as const,
-      invitedDate: "Just now",
-      recordsAccess: 0,
-      scopeSummary: "To be configured",
-    }));
-
-    const updatedList = [...beneficiaries, ...confirmedBeneficiaries];
-    setBeneficiaries(updatedList);
-    localStorage.setItem("beneficiariesList", JSON.stringify(updatedList));
-
-    // Log activity
+    setBeneficiaries(updated);
+    saveBeneficiaries(updated);
     logActivity(
-      "Beneficiaries Added",
-      "beneficiaries",
-      `Added ${confirmedBeneficiaries.length} family member(s) as beneficiaries`,
-      {
-        field: "Beneficiaries",
-        newValue: confirmedBeneficiaries.map(b => b.name).join(", ")
-      }
+      editingId ? "Beneficiary Updated" : "Beneficiary Added",
+      "beneficiary",
+      `${form.name} (${form.role})`
     );
-
-    // Clear pending
-    localStorage.removeItem("pendingBeneficiaries");
-    setPendingBeneficiaries([]);
-    setShowConfirmation(false);
+    setShowForm(false);
+    setEditingId(null);
   };
 
-  const cancelConfirmation = () => {
-    localStorage.removeItem("pendingBeneficiaries");
-    setPendingBeneficiaries([]);
-    setShowConfirmation(false);
+  const removeBeneficiary = (person: Beneficiary) => {
+    if (!confirm(`Remove ${person.name} from your beneficiaries?`)) return;
+    const updated = beneficiaries.filter((b) => b.id !== person.id);
+    setBeneficiaries(updated);
+    saveBeneficiaries(updated);
+    logActivity("Beneficiary Removed", "beneficiary", person.name);
   };
 
   const roleConfig = {
@@ -145,6 +104,10 @@ export default function BeneficiariesPage() {
       variant: "default" as const,
       description: "Limited visibility for legal or advisory purposes",
     },
+    contact: {
+      variant: "default" as const,
+      description: "Trusted contact with no record access",
+    },
   };
 
   const executorCount = beneficiaries.filter(b => b.role === "executor").length;
@@ -157,110 +120,72 @@ export default function BeneficiariesPage() {
         title="Beneficiaries"
         subtitle="Manage executors, beneficiaries, and disclosure scopes"
         action={
-          <Button variant="primary">
+          <Button variant="primary" onClick={openAdd}>
             <UserPlus className="h-4 w-4" />
             Invite Beneficiary
           </Button>
         }
       />
 
-      {/* Confirmation Section for Pending Beneficiaries */}
-      {showConfirmation && pendingBeneficiaries.length > 0 && (
-        <Card className="mb-6" style={{
-          backgroundColor: "var(--accent-dim)",
-          borderColor: "var(--accent)",
-          borderWidth: "2px"
-        }}>
-          <div className="flex items-start gap-3 mb-4">
-            <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--accent)", color: "var(--text-inverse)" }}>
-              <Users className="h-6 w-6" />
+
+      {/* Add / Edit Beneficiary Form */}
+      {showForm && (
+        <Card className="mb-6" style={{ borderColor: "var(--accent)", borderWidth: "1px" }}>
+          <h3 className="font-semibold text-lg mb-4" style={{ color: "var(--text-primary)" }}>
+            {editingId ? "Edit Beneficiary" : "Add Beneficiary"}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <Input
+              label="Full Name *"
+              placeholder="Jane Doe"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+            <Input
+              label="Email Address *"
+              type="email"
+              placeholder="jane@example.com"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              required
+            />
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+                Role
+              </label>
+              <select
+                className="input"
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value as Beneficiary["role"] })}
+              >
+                <option value="beneficiary">Beneficiary</option>
+                <option value="executor">Executor</option>
+                <option value="observer">Observer</option>
+              </select>
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-lg mb-1" style={{ color: "var(--text-primary)" }}>
-                Confirm Family Members as Beneficiaries
-              </h3>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                Review and add contact information for your family members. You can configure their access permissions after adding them.
-              </p>
-            </div>
+            <Input
+              label="Relationship"
+              placeholder="Spouse, Child, Friend…"
+              value={form.relationship}
+              onChange={(e) => setForm({ ...form, relationship: e.target.value })}
+            />
           </div>
-
-          <div className="space-y-4 mb-6">
-            {pendingBeneficiaries.map((beneficiary) => (
-              <Card key={beneficiary.id} style={{ backgroundColor: "var(--bg-primary)" }}>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full font-semibold text-lg"
-                    style={{ background: "var(--accent-gradient)", color: "var(--text-inverse)" }}>
-                    {beneficiary.name.split(" ").map((n) => n[0]).join("")}
-                  </div>
-
-                  <div className="flex-1 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                          {beneficiary.name}
-                        </h4>
-                        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                          Relationship: {beneficiary.relationship}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => removePendingBeneficiary(beneficiary.id as string)}
-                        className="p-1 hover:bg-hover rounded"
-                        style={{ color: "var(--text-muted)" }}
-                        title="Remove"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input
-                        label="Email Address *"
-                        type="email"
-                        placeholder="example@email.com"
-                        value={beneficiary.email}
-                        onChange={(e) => updatePendingBeneficiary(beneficiary.id as string, "email", e.target.value)}
-                        required
-                      />
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                          Role
-                        </label>
-                        <select
-                          className="input"
-                          value={beneficiary.role}
-                          onChange={(e) => updatePendingBeneficiary(beneficiary.id as string, "role", e.target.value)}
-                        >
-                          <option value="beneficiary">Beneficiary</option>
-                          <option value="executor">Executor</option>
-                          <option value="observer">Observer</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      <span>Access permissions can be configured after adding</span>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          <div className="flex gap-3 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+          <div className="flex gap-3">
             <Button
               variant="primary"
-              onClick={confirmBeneficiaries}
-              disabled={pendingBeneficiaries.some(b => !b.email || !b.email.trim())}
+              onClick={submitForm}
+              disabled={!form.name.trim() || !form.email.trim()}
             >
               <Check className="h-4 w-4" />
-              Confirm & Add {pendingBeneficiaries.length} Beneficiar{pendingBeneficiaries.length === 1 ? 'y' : 'ies'}
+              {editingId ? "Save Changes" : "Add Beneficiary"}
             </Button>
             <Button
               variant="ghost"
-              onClick={cancelConfirmation}
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+              }}
             >
               Cancel
             </Button>
@@ -332,7 +257,7 @@ export default function BeneficiariesPage() {
             <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
               Add family members or trusted individuals who will receive access to your information.
             </p>
-            <Button variant="primary">
+            <Button variant="primary" onClick={openAdd}>
               <UserPlus className="h-4 w-4" />
               Add Your First Beneficiary
             </Button>
@@ -377,7 +302,12 @@ export default function BeneficiariesPage() {
                     ) : (
                       <Badge variant="warning">Pending</Badge>
                     )}
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeBeneficiary(person)}
+                      title="Remove beneficiary"
+                    >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </div>
@@ -401,14 +331,22 @@ export default function BeneficiariesPage() {
 
                 {/* Actions Row */}
                 <div className="flex gap-2 mt-4">
-                  <Button variant="secondary" size="sm">
-                    Edit Scope
+                  <Button variant="secondary" size="sm" onClick={() => openEdit(person)}>
+                    Edit
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" disabled title="Coming soon">
                     View Details
                   </Button>
                   {person.status === "pending" && (
-                    <Button variant="ghost" size="sm" className="text-accent">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-accent"
+                      onClick={() => {
+                        logActivity("Invite Sent", "beneficiary", `Invitation sent to ${person.name}`);
+                        alert(`Invitation sent to ${person.email}`);
+                      }}
+                    >
                       <Mail className="h-3.5 w-3.5" />
                       Send Invite
                     </Button>

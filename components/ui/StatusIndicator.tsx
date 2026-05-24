@@ -1,5 +1,5 @@
 interface StatusIndicatorProps {
-  status: "draft" | "armed" | "triggered" | "active" | "pending" | "completed";
+  status: "draft" | "armed" | "disarmed" | "triggered" | "active" | "pending" | "completed";
   label?: string;
   size?: "sm" | "md" | "lg";
 }
@@ -12,6 +12,7 @@ export default function StatusIndicator({
   const statusConfig = {
     draft: { color: "bg-gray-500", label: "Draft" },
     armed: { color: "bg-accent", label: "Armed" },
+    disarmed: { color: "bg-gray-500", label: "Disarmed" },
     triggered: { color: "bg-warning", label: "Triggered" },
     active: { color: "bg-green-500", label: "Active" },
     pending: { color: "bg-yellow-500", label: "Pending" },

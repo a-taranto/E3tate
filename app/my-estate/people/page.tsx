@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
 import { Users, Plus, Trash2, ArrowRight, ArrowLeft, Shield, Heart } from "lucide-react";
-import type { Beneficiary } from "@/types";
+import { loadBeneficiaries, saveBeneficiaries as persistBeneficiaries, type Beneficiary } from "@/lib/store";
 
 export default function SetupPeoplePage() {
   const router = useRouter();
@@ -18,19 +18,17 @@ export default function SetupPeoplePage() {
     relationship: "",
   });
 
-  // Load saved data
+  // Load from the unified store (shared with the dashboard and /beneficiaries)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("setup_beneficiaries");
-      if (saved) {
-        setBeneficiaries(JSON.parse(saved));
-      }
-    }
+    const refresh = () => setBeneficiaries(loadBeneficiaries());
+    refresh();
+    window.addEventListener("store-updated", refresh);
+    return () => window.removeEventListener("store-updated", refresh);
   }, []);
 
   const saveBeneficiaries = (updated: Beneficiary[]) => {
     setBeneficiaries(updated);
-    localStorage.setItem("setup_beneficiaries", JSON.stringify(updated));
+    persistBeneficiaries(updated);
   };
 
   const handleAddOrUpdate = () => {
@@ -54,7 +52,7 @@ export default function SetupPeoplePage() {
         role: formData.role,
         relationship: formData.relationship,
         status: "pending",
-        addedAt: new Date(),
+        addedAt: new Date().toISOString(),
       };
       saveBeneficiaries([...beneficiaries, newBeneficiary]);
     }
@@ -68,7 +66,7 @@ export default function SetupPeoplePage() {
     setFormData({
       name: beneficiary.name,
       email: beneficiary.email,
-      role: beneficiary.role,
+      role: beneficiary.role === "executor" ? "executor" : "beneficiary",
       relationship: beneficiary.relationship || "",
     });
     setEditingId(beneficiary.id);

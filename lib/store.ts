@@ -219,6 +219,50 @@ export function deleteVaultRecord(id: string): VaultRecord[] {
   return updated;
 }
 
+// Insert or update by id (update if a record with the same id exists).
+export function upsertVaultRecord(record: VaultRecord): VaultRecord[] {
+  const existing = loadVaultRecords();
+  const normalized = normalizeRecord(record);
+  const idx = existing.findIndex((r) => r.id === normalized.id);
+  const updated =
+    idx >= 0
+      ? existing.map((r) => (r.id === normalized.id ? { ...r, ...normalized } : r))
+      : [...existing, normalized];
+  saveVaultRecords(updated);
+  return updated;
+}
+
+// Mirror an uploaded will into the vault so it appears and counts there. Closes
+// the gap where will uploads only wrote their own `uploaded_will` key. Falls back
+// to a blob-less record if storing the file data would exceed the storage quota.
+export function mirrorWillToVault(will: { fileName: string; format?: string; data?: string }): void {
+  if (typeof window === "undefined") return;
+  const base: VaultRecord = {
+    id: "uploaded-will",
+    title: "Last Will and Testament",
+    type: "documents",
+    description: `Uploaded will: ${will.fileName}`,
+    beneficiaries: ["Executor Only"],
+    scope: "executor",
+    encrypted: true,
+    source: "vault",
+    fileType: (will.format || "file").toUpperCase(),
+    createdAt: new Date().toISOString().split("T")[0],
+    lastModified: "Recently",
+  };
+  try {
+    upsertVaultRecord(
+      will.data ? { ...base, metadata: { file: { name: will.fileName, data: will.data } } } : base
+    );
+  } catch {
+    try {
+      upsertVaultRecord(base);
+    } catch {
+      /* storage quota exceeded — skip the vault mirror */
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API — beneficiaries
 // ---------------------------------------------------------------------------
@@ -482,4 +526,49 @@ export function migrateCategoriesV2(): void {
   }
   localStorage.setItem(CATEGORIES_V2_FLAG, "1");
   categoriesV2Ran = true;
+}
+
+// ---------------------------------------------------------------------------
+// App settings & execution status (shared by Settings, Triggers, Dashboard)
+// ---------------------------------------------------------------------------
+
+export type ExecutionStatus = "armed" | "disarmed";
+
+export interface AppSettings {
+  checkInFrequency: number; // days between proof-of-life check-ins
+  inactivityTrigger: number; // days without check-in before release
+  notifyCheckIn: boolean;
+  notifyActivity: boolean;
+  executionStatus: ExecutionStatus;
+  triggersEnabled: Record<string, boolean>; // trigger id -> enabled
+}
+
+const SETTINGS_KEY = "app_settings";
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  checkInFrequency: 30,
+  inactivityTrigger: 90,
+  notifyCheckIn: true,
+  notifyActivity: true,
+  executionStatus: "armed",
+  triggersEnabled: { "1": true, "2": true, "3": false },
+};
+
+export function loadSettings(): AppSettings {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  const raw = readRaw<Partial<AppSettings>>(SETTINGS_KEY);
+  return {
+    ...DEFAULT_SETTINGS,
+    ...(raw || {}),
+    triggersEnabled: { ...DEFAULT_SETTINGS.triggersEnabled, ...(raw?.triggersEnabled || {}) },
+  };
+}
+
+export function saveSettings(patch: Partial<AppSettings>): AppSettings {
+  const next = { ...loadSettings(), ...patch };
+  if (typeof window !== "undefined") {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    dispatchUpdate();
+  }
+  return next;
 }

@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import { Card, Button, Badge, Input } from "@/components/ui";
+import { loadSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/store";
+import { logActivity } from "@/lib/activityLogger";
 import {
   Shield,
   Smartphone,
@@ -21,6 +24,28 @@ import {
 } from "lucide-react";
 
 export default function SettingsPage() {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+
+  useEffect(() => {
+    const refresh = () => setSettings(loadSettings());
+    refresh();
+    window.addEventListener("store-updated", refresh);
+    return () => window.removeEventListener("store-updated", refresh);
+  }, []);
+
+  const update = (patch: Partial<AppSettings>, logMessage?: string) => {
+    setSettings(saveSettings(patch));
+    if (logMessage) logActivity("Settings Updated", "settings", logMessage);
+  };
+
+  const handleDeleteAccount = () => {
+    if (deleteConfirm !== "DELETE") return;
+    if (!confirm("This permanently erases all local vault data. Continue?")) return;
+    localStorage.clear();
+    window.location.href = "/";
+  };
+
   // Mock data
   const securitySettings = {
     mfaEnabled: true,
@@ -121,10 +146,10 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <Button variant="secondary" size="sm">
+              <Button variant="secondary" size="sm" disabled title="Coming soon">
                 Change Email
               </Button>
-              <Button variant="secondary" size="sm">
+              <Button variant="secondary" size="sm" disabled title="Coming soon">
                 Change Password
               </Button>
             </div>
@@ -144,7 +169,7 @@ export default function SettingsPage() {
                 <Badge variant="success">Enabled</Badge>
               </div>
             </div>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary" size="sm" disabled title="Coming soon">
               Manage MFA
             </Button>
           </div>
@@ -176,7 +201,7 @@ export default function SettingsPage() {
                           </p>
                         </div>
                       </div>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" disabled title="Coming soon">
                         Remove
                       </Button>
                     </div>
@@ -208,7 +233,7 @@ export default function SettingsPage() {
                 </p>
               </div>
             </div>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary" size="sm" disabled title="Coming soon">
               Reconfigure Shards
             </Button>
           </div>
@@ -237,11 +262,11 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <Button variant="secondary" size="sm">
+              <Button variant="secondary" size="sm" disabled title="Coming soon">
                 <Download className="h-4 w-4" />
                 Download Backup
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" disabled title="Coming soon">
                 <Upload className="h-4 w-4" />
                 Restore Backup
               </Button>
@@ -269,10 +294,19 @@ export default function SettingsPage() {
                       <p className="text-sm font-medium">Check-in Frequency</p>
                       <p className="text-xs text-text-muted">How often you'll be asked to confirm you're active</p>
                     </div>
-                    <select className="input w-32">
-                      <option>30 days</option>
-                      <option>60 days</option>
-                      <option>90 days</option>
+                    <select
+                      className="input w-32"
+                      value={settings.checkInFrequency}
+                      onChange={(e) =>
+                        update(
+                          { checkInFrequency: Number(e.target.value) },
+                          `Check-in frequency set to ${e.target.value} days`
+                        )
+                      }
+                    >
+                      <option value={30}>30 days</option>
+                      <option value={60}>60 days</option>
+                      <option value={90}>90 days</option>
                     </select>
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: "var(--border)" }}>
@@ -280,10 +314,19 @@ export default function SettingsPage() {
                       <p className="text-sm font-medium">Inactivity Trigger</p>
                       <p className="text-xs text-text-muted">Days without check-in before vault is released</p>
                     </div>
-                    <select className="input w-32">
-                      <option>90 days</option>
-                      <option>120 days</option>
-                      <option>180 days</option>
+                    <select
+                      className="input w-32"
+                      value={settings.inactivityTrigger}
+                      onChange={(e) =>
+                        update(
+                          { inactivityTrigger: Number(e.target.value) },
+                          `Inactivity trigger set to ${e.target.value} days`
+                        )
+                      }
+                    >
+                      <option value={90}>90 days</option>
+                      <option value={120}>120 days</option>
+                      <option value={180}>180 days</option>
                     </select>
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: "var(--success)", backgroundColor: "var(--success-bg)" }}>
@@ -310,14 +353,34 @@ export default function SettingsPage() {
                 </p>
                 <div className="space-y-2">
                   <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer" style={{ borderColor: "var(--border)" }}>
-                    <input type="checkbox" defaultChecked className="w-4 h-4" />
+                    <input
+                      type="checkbox"
+                      checked={settings.notifyCheckIn}
+                      onChange={(e) =>
+                        update(
+                          { notifyCheckIn: e.target.checked },
+                          `Check-in reminders ${e.target.checked ? "enabled" : "disabled"}`
+                        )
+                      }
+                      className="w-4 h-4"
+                    />
                     <div>
                       <p className="text-sm font-medium">Check-in reminders</p>
                       <p className="text-xs text-text-muted">Receive email when check-in is due</p>
                     </div>
                   </label>
                   <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer" style={{ borderColor: "var(--border)" }}>
-                    <input type="checkbox" defaultChecked className="w-4 h-4" />
+                    <input
+                      type="checkbox"
+                      checked={settings.notifyActivity}
+                      onChange={(e) =>
+                        update(
+                          { notifyActivity: e.target.checked },
+                          `Activity notifications ${e.target.checked ? "enabled" : "disabled"}`
+                        )
+                      }
+                      className="w-4 h-4"
+                    />
                     <div>
                       <p className="text-sm font-medium">Activity notifications</p>
                       <p className="text-xs text-text-muted">Receive alerts for important account activity</p>
@@ -398,8 +461,15 @@ export default function SettingsPage() {
                 <Input
                   placeholder='Type "DELETE" to confirm'
                   className="max-w-md"
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
                 />
-                <Button variant="danger" size="sm">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={deleteConfirm !== "DELETE"}
+                  onClick={handleDeleteAccount}
+                >
                   <Trash2 className="h-4 w-4" />
                   Permanently Delete Account
                 </Button>

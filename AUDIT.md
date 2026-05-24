@@ -1,11 +1,43 @@
 # Keepr-E3tate — Code Audit & Fix Plan
 
-**Date:** 2026-05-22
+**Date:** 2026-05-22 · **Updated:** 2026-05-24 (see [Resolution status](#resolution-status--2026-05-24))
 **Scope:** Whole app — every route under `app/`, plus `lib/`, `components/`, `types/`, and `app/globals.css`.
 **Method:** Static code review against the behavioral findings from a Chrome session at `localhost:3000` (Overview, Will, Vault, Beneficiaries, Settings).
-**Deliverable:** Findings only. No code changes were made in this pass.
+**Deliverable (2026-05-22):** Findings only — no code changes were made in that pass.
+**Status (2026-05-24):** Phases 1–4 implemented, verified, and committed on branch `audit-phases-1-4`. 44 → 0 TypeScript errors; `next build` green.
 
-All line numbers are relative to the file path shown. Paths are relative to the repo root unless absolute.
+All line numbers below are relative to the file at the time of the original audit; many have since shifted. Paths are relative to the repo root unless absolute.
+
+---
+
+## Resolution status — 2026-05-24
+
+A follow-up pass (two days after this audit) implemented the fix plan in §6. The unified store (`lib/store.ts`) — which existed in code but had never been mounted — is now wired throughout; the 6→4 category migration is live; dead controls are wired or gated; the information architecture is fixed; and uploaded wills mirror into the vault. Net result: **44 → 0 TypeScript errors**, `next build` passes (20 routes), committed on `audit-phases-1-4` (≈ −3,560 net lines, mostly the `profile-old` deletion).
+
+### Root causes
+
+| ID | Status | Notes |
+|---|---|---|
+| RC-A — no single source of truth | ✅ Resolved | `lib/store.ts` wired into dashboard, vault, beneficiaries, `estate-score`, and the my-estate wizard. The numbers agree. |
+| RC-B — half-finished 6→4 migration | ✅ Resolved | `toPrimaryType` + `migrateCategoriesV2`; the live vault renders the 4 categories and tab counts sum. |
+| RC-C — pervasive dead CTAs | ✅ Resolved | CTAs wired or gated "Coming soon"; `Card` only applies `cursor-pointer` when an `onClick` is present. |
+| RC-D — two parallel profile flows | ✅ Resolved | `profile-old` (3,296 lines) and the orphaned `profile-mapping.ts` deleted. |
+| RC-E — schema drift | ◐ Partial | The store normalizes role/status/type. `types/index.ts` still defines the old 6-type `RecordType`, but nothing load-bearing imports it now. |
+| RC-F — sidebar reaches 5 of ~11 routes | ✅ Resolved | Sidebar covers all 9 routes with deep-route active-state. |
+| RC-G — `activityLogger` barely called | ◐ Mostly | Now logs from Settings, Triggers, Beneficiaries, and Will. (Vault delete still doesn't log.) |
+
+### Findings
+
+- **P0-1 … P0-8** — ✅ all resolved. One store feeds dashboard / vault / beneficiaries / score (they agree); Settings + Triggers controls persist; delete-account works; the `observer` role is first-class.
+- **P1-1, P1-2, P1-4 … P1-15** — ✅ resolved (wired or gated). Vault tab counts sum; crypto shows Wallets; will/create reads real beneficiaries; the `profile-old`-specific findings (P1-13/14/15) are moot after deletion.
+- **P2-1, P2-4, P2-5, P2-6, P2-9, P2-10** — ✅ resolved (scroll-behavior attribute; derived sidebar status + identity; category copy; `services.ts` uses Credentials; `Card` affordance gate).
+
+### Still open
+
+- **Will draft keys not unified** (P1-16, partial): `uploaded_will` now mirrors into the vault, but `will_template` (will/create) and `will-draft-*` (will/builder) remain separate stores.
+- **`types/index.ts` stale** (RC-E / P2-2): still the old 6-type model — harmless now that `profile-old` is gone, but should be aligned to `lib/store.ts`.
+- **Cosmetic / minor**: vault empty-state copy not parameterized (P1-3); Triggers execution timeline still uses mock relative dates (P2-8); `will/builder` uses `window.location.search` instead of `useSearchParams` (P2-12); vault delete doesn't `logActivity`.
+- **README** (P2-3): there is no `README.md` in the repo to update.
 
 ---
 
@@ -269,6 +301,8 @@ Ordered by impact-per-effort. Each line is a unit of work; bracketed estimate is
 
 ### Phase 1 — Stop lying (1–2 days)
 
+> **✅ Done (2026-05-24)** — store wired into all read surfaces; dashboard, vault, beneficiaries, and the readiness score now agree.
+
 1. **Pick one storage shape for "vault records" and write everywhere to it.** I recommend keeping `vault_records` (it's what `estate-score.ts` already reads) and consolidating `uploadedDocuments`, `profileAssets`, `profileAccounts`, `vaultCredentials`, `profileIdentities` into one normalized array. Write a one-time migration in a `useEffect` at app boot that reads the old keys and rewrites them under `vault_records`, then deletes the old keys. **[1 day]**
 
 2. **Pick one storage shape for "beneficiaries."** Merge `beneficiariesList`, `setup_beneficiaries`, `pendingBeneficiaries` into one key. Update `app/my-estate/people` and `app/profile-old` to write to it. **[0.5 day]**
@@ -276,6 +310,8 @@ Ordered by impact-per-effort. Each line is a unit of work; bracketed estimate is
 3. **Replace dashboard mock numbers with reads from the unified store.** `app/page.tsx:28-32, 181, 186, 173`. Compute `totalRecords`, beneficiary count, and category count from the live data. The Estate Readiness Score will then agree with the tile next to it. **[0.5 day]**
 
 ### Phase 2 — Finish the category migration (1–2 days)
+
+> **✅ Done (2026-05-24)** — the 6→4 collapse is live in the vault and `services.ts` uses Credentials. (`types/index.ts` still carries the old enum — see Resolution → Still open.)
 
 4. **Migrate seeded mock records to the 4 new types.** `app/vault/page.tsx:448-541`. Map `financial → credentials` (where it's a bank login) or `wallets` (where it's a crypto wallet); `identity → accounts` is wrong semantically — Identity records aren't login accounts, so consider whether the new "4 types" actually has room for legal documents. Either rename "Documents" to cover identity papers or add Identity back as a 5th type. **[0.5 day, blocked on a product decision]**
 
@@ -287,6 +323,8 @@ Ordered by impact-per-effort. Each line is a unit of work; bracketed estimate is
 
 ### Phase 3 — Wire dead controls (2–3 days)
 
+> **✅ Done (2026-05-24)** — every dead CTA is wired or gated as a disabled "Coming soon"; `Card` no longer fakes `cursor-pointer` without an `onClick`.
+
 8. **Decide which CTAs are intentional skeletons vs. shipping bugs.** Tag each with one of: (a) wire it now, (b) gate behind a "Coming soon" badge that disables the click, (c) remove the button. A simple sweep can take 1 day if you keep the implementations minimal (most need a modal or a `router.push`).
 
 9. **Make `Card` refuse to render `cursor-pointer` when `onClick` is unset, or warn in dev.** `components/ui/Card.tsx:25`. Catches this class of bug at the type level. **[0.25 day]**
@@ -297,6 +335,8 @@ Ordered by impact-per-effort. Each line is a unit of work; bracketed estimate is
 
 ### Phase 4 — Information architecture (1 day)
 
+> **✅ Done (2026-05-24)** — sidebar covers all 9 routes with deep-route active-state; `profile-old` deleted; `pendingBeneficiaries` flow removed; `logActivity` added across pages.
+
 12. **Add the missing sidebar entries** (Activity, Triggers, Help, optionally a Profile/My-Estate top entry). `components/layout/Sidebar.tsx:18-24`. **[0.25 day]**
 
 13. **Decide what to do with `profile-old`.** Either delete it (and migrate any unique features into `my-estate/*`) or restore the link to it. Right now it's dead weight that will rot. **[0.25 day to delete, 2+ days to merge features]**
@@ -306,6 +346,8 @@ Ordered by impact-per-effort. Each line is a unit of work; bracketed estimate is
 15. **Call `logActivity()` from the other pages.** Triggers (arm/disarm), Settings (save), Vault (create/edit/delete), profile changes. Most are one-line additions next to existing state writes. **[0.5 day]**
 
 ### Phase 5 — Polish (0.5 day)
+
+> **✅ Done (2026-05-24)** — `data-scroll-behavior` added; the `User` import is now used (My Estate nav); Proof-of-Life status and identity derive from real data.
 
 16. **Add `data-scroll-behavior="smooth"` to `<html>`** in `app/layout.tsx:16`. **[5 min]**
 

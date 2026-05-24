@@ -1,5 +1,10 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import { Card, Button, Badge, StatusIndicator } from "@/components/ui";
+import { loadSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/store";
+import { logActivity } from "@/lib/activityLogger";
 import {
   Zap,
   Clock,
@@ -12,9 +17,42 @@ import {
 } from "lucide-react";
 
 export default function TriggersPage() {
-  // Mock data
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    const refresh = () => setSettings(loadSettings());
+    refresh();
+    window.addEventListener("store-updated", refresh);
+    return () => window.removeEventListener("store-updated", refresh);
+  }, []);
+
+  const isArmed = settings.executionStatus === "armed";
+
+  const toggleArmed = () => {
+    const next = isArmed ? "disarmed" : "armed";
+    setSettings(saveSettings({ executionStatus: next }));
+    logActivity(
+      next === "armed" ? "Triggers Armed" : "Triggers Disarmed",
+      "trigger",
+      next === "armed"
+        ? "All execution triggers armed"
+        : "All execution triggers disarmed"
+    );
+  };
+
+  const toggleTrigger = (id: string, name: string, enabled: boolean) => {
+    setSettings(
+      saveSettings({ triggersEnabled: { ...settings.triggersEnabled, [id]: enabled } })
+    );
+    logActivity(
+      enabled ? "Trigger Enabled" : "Trigger Disabled",
+      "trigger",
+      `${name} ${enabled ? "enabled" : "disabled"}`
+    );
+  };
+
+  // Display-only mock data
   const executionStatus = {
-    state: "armed" as const,
     armedDate: "45 days ago",
     lastHeartbeat: "6 hours ago",
     nextCheckIn: "18 hours",
@@ -62,6 +100,10 @@ export default function TriggersPage() {
     },
   ];
 
+  const isTriggerEnabled = (t: (typeof triggers)[number]) =>
+    settings.triggersEnabled[String(t.id)] ?? t.enabled;
+  const activeTriggerCount = triggers.filter(isTriggerEnabled).length;
+
   const executionTimeline = [
     {
       id: 1,
@@ -93,19 +135,22 @@ export default function TriggersPage() {
         subtitle="Configure and monitor execution triggers and conditions"
       />
 
-      {/* Critical Warning */}
-      <Card className="mb-6 border-l-4 border-l-warning bg-warning/5">
+      {/* Execution arm/disarm control */}
+      <Card className={`mb-6 border-l-4 ${isArmed ? "border-l-warning bg-warning/5" : "border-l-border"}`}>
         <div className="flex items-start gap-4">
-          <AlertTriangle className="h-6 w-6 text-warning flex-shrink-0 mt-0.5" />
+          <AlertTriangle className={`h-6 w-6 flex-shrink-0 mt-0.5 ${isArmed ? "text-warning" : "text-text-muted"}`} />
           <div className="flex-1">
-            <h3 className="font-medium text-lg mb-1">Critical System Armed</h3>
+            <h3 className="font-medium text-lg mb-1">
+              {isArmed ? "Critical System Armed" : "Execution Disarmed"}
+            </h3>
             <p className="text-text-secondary text-sm mb-3">
-              Your execution triggers are currently armed. Beneficiaries will receive
-              vault access if trigger conditions are met and cooling-off periods expire.
+              {isArmed
+                ? "Your execution triggers are currently armed. Beneficiaries will receive vault access if trigger conditions are met and cooling-off periods expire."
+                : "Execution is disarmed. No triggers will release vault access until you arm the system again."}
             </p>
-            <Button variant="danger" size="sm">
+            <Button variant={isArmed ? "danger" : "primary"} size="sm" onClick={toggleArmed}>
               <Shield className="h-4 w-4" />
-              Disarm All Triggers
+              {isArmed ? "Disarm All Triggers" : "Arm All Triggers"}
             </Button>
           </div>
         </div>
@@ -115,8 +160,10 @@ export default function TriggersPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card>
           <p className="text-text-muted text-sm mb-2">System Status</p>
-          <StatusIndicator status={executionStatus.state} size="lg" />
-          <p className="text-xs text-text-muted mt-2">Armed {executionStatus.armedDate}</p>
+          <StatusIndicator status={settings.executionStatus} size="lg" />
+          <p className="text-xs text-text-muted mt-2">
+            {isArmed ? `Armed ${executionStatus.armedDate}` : "System disarmed"}
+          </p>
         </Card>
         <Card>
           <p className="text-text-muted text-sm mb-2">Last Heartbeat</p>
@@ -133,7 +180,7 @@ export default function TriggersPage() {
         </Card>
         <Card>
           <p className="text-text-muted text-sm mb-2">Active Triggers</p>
-          <p className="text-xl font-semibold">2 / 3</p>
+          <p className="text-xl font-semibold">{activeTriggerCount} / {triggers.length}</p>
           <p className="text-xs text-text-muted mt-2">Monitoring enabled</p>
         </Card>
       </div>
@@ -142,35 +189,37 @@ export default function TriggersPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Trigger Configuration</h2>
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary" size="sm" disabled title="Coming soon">
             <SettingsIcon className="h-4 w-4" />
             Configure
           </Button>
         </div>
 
         <div className="space-y-4">
-          {triggers.map((trigger) => (
+          {triggers.map((trigger) => {
+            const enabled = isTriggerEnabled(trigger);
+            return (
             <Card key={trigger.id} padding="none">
               <div className="p-5">
                 {/* Header */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-start gap-4">
                     <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${
-                      trigger.enabled ? "bg-accent-muted" : "bg-gray-800"
+                      enabled ? "bg-accent-muted" : "bg-gray-800"
                     }`}>
                       {trigger.type === "heartbeat" && (
                         <Activity className={`h-6 w-6 ${
-                          trigger.enabled ? "text-accent" : "text-gray-500"
+                          enabled ? "text-accent" : "text-gray-500"
                         }`} />
                       )}
                       {trigger.type === "manual" && (
                         <Zap className={`h-6 w-6 ${
-                          trigger.enabled ? "text-accent" : "text-gray-500"
+                          enabled ? "text-accent" : "text-gray-500"
                         }`} />
                       )}
                       {trigger.type === "legal" && (
                         <FileCheck className={`h-6 w-6 ${
-                          trigger.enabled ? "text-accent" : "text-gray-500"
+                          enabled ? "text-accent" : "text-gray-500"
                         }`} />
                       )}
                     </div>
@@ -178,8 +227,8 @@ export default function TriggersPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
                         <h3 className="font-semibold text-lg">{trigger.name}</h3>
-                        <Badge variant={trigger.enabled ? "success" : "default"}>
-                          {trigger.enabled ? "Enabled" : "Disabled"}
+                        <Badge variant={enabled ? "success" : "default"}>
+                          {enabled ? "Enabled" : "Disabled"}
                         </Badge>
                       </div>
                       <p className="text-sm text-text-secondary mb-3">
@@ -192,8 +241,8 @@ export default function TriggersPage() {
                     <input
                       type="checkbox"
                       className="sr-only peer"
-                      checked={trigger.enabled}
-                      readOnly
+                      checked={enabled}
+                      onChange={(e) => toggleTrigger(String(trigger.id), trigger.name, e.target.checked)}
                     />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
                   </label>
@@ -213,16 +262,17 @@ export default function TriggersPage() {
 
                 {/* Actions */}
                 <div className="flex gap-2 mt-4">
-                  <Button variant="secondary" size="sm">
+                  <Button variant="secondary" size="sm" disabled title="Coming soon">
                     Edit Configuration
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" disabled title="Coming soon">
                     Test Trigger
                   </Button>
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       </div>
 

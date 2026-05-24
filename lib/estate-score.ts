@@ -1,6 +1,8 @@
 // Estate Readiness Score calculation
 // Based on simplified architecture spec
 
+import { loadBeneficiaries, loadVaultRecords } from "@/lib/store";
+
 export interface EstateData {
   hasWill: boolean;
   hasExecutor: boolean;
@@ -145,28 +147,22 @@ export function getEstateDataFromLocalStorage(): EstateData {
     };
   }
 
-  // Check for will
+  // Check for will (still keyed separately until the will flow joins the store)
   const willData = localStorage.getItem("uploaded_will");
   const hasWill = !!willData;
 
-  // Check beneficiaries
-  const beneficiaries = JSON.parse(
-    localStorage.getItem("setup_beneficiaries") || "[]"
-  );
-  const hasExecutor = beneficiaries.some(
-    (b: any) => b.role === "executor"
-  );
+  // Beneficiaries from the unified store (same source the dashboard/beneficiaries read)
+  const beneficiaries = loadBeneficiaries();
+  const hasExecutor = beneficiaries.some((b) => b.role === "executor");
   const beneficiaryCount = beneficiaries.length;
 
-  // Check vault items
-  const vaultRecords = JSON.parse(
-    localStorage.getItem("vault_records") || "[]"
-  );
+  // Vault items from the unified store
+  const vaultRecords = loadVaultRecords();
   const vaultItemCount = vaultRecords.length;
 
   // Check items with beneficiaries
   const itemsWithBeneficiaries = vaultRecords.filter(
-    (r: any) => r.beneficiaries && r.beneficiaries.length > 0
+    (r) => r.beneficiaries && r.beneficiaries.length > 0
   ).length;
 
   const totalItems = vaultRecords.length;

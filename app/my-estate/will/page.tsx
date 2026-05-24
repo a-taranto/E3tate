@@ -11,6 +11,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
+import { mirrorWillToVault } from "@/lib/store";
 
 export default function SetupWillPage() {
   const router = useRouter();
@@ -40,6 +41,9 @@ export default function SetupWillPage() {
       };
 
       localStorage.setItem("uploaded_will", JSON.stringify(willData));
+
+      // Mirror into the unified vault so the will appears and counts there.
+      mirrorWillToVault({ fileName: file.name, format: ext });
 
       // Mark setup as complete
       handleCompleteSetup();

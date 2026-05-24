@@ -18,12 +18,14 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { logActivity } from "@/lib/activityLogger";
+import { mirrorWillToVault } from "@/lib/store";
 
 interface UploadedWill {
   fileName: string;
   uploadedAt: string;
   physicalLocation?: string;
   format: string;
+  data?: string; // base64 data URL of the uploaded file, for download
 }
 
 export default function WillPage() {
@@ -60,14 +62,30 @@ export default function WillPage() {
       // Simulate upload delay
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
+      // Read the file as a data URL so it can be downloaded later.
+      const data = await new Promise<string | undefined>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(undefined);
+        reader.readAsDataURL(file);
+      });
+
       const willData: UploadedWill = {
         fileName: file.name,
         uploadedAt: new Date().toISOString(),
         format: ext || '',
+        data,
       };
 
       setUploadedWill(willData);
-      localStorage.setItem("uploaded_will", JSON.stringify(willData));
+      try {
+        localStorage.setItem("uploaded_will", JSON.stringify(willData));
+      } catch {
+        // File too large for localStorage — keep metadata only.
+        localStorage.setItem("uploaded_will", JSON.stringify({ ...willData, data: undefined }));
+      }
+      // Mirror into the unified vault so the will appears and counts there.
+      mirrorWillToVault({ fileName: file.name, format: ext, data });
       setShowLocationForm(true);
 
       logActivity(
@@ -255,7 +273,19 @@ export default function WillPage() {
                 </div>
               </div>
             </div>
-            <Button variant="primary" size="sm">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!uploadedWill.data}
+              title={uploadedWill.data ? undefined : "Original file not stored"}
+              onClick={() => {
+                if (!uploadedWill.data) return;
+                const a = document.createElement("a");
+                a.href = uploadedWill.data;
+                a.download = uploadedWill.fileName;
+                a.click();
+              }}
+            >
               <Download className="h-4 w-4" />
               Download
             </Button>
@@ -317,7 +347,7 @@ export default function WillPage() {
 
         {/* Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card padding="md" hover className="cursor-pointer">
+          <Card padding="md" hover className="cursor-pointer" onClick={() => setUploadedWill(null)}>
             <div className="flex items-center gap-3">
               <Upload className="h-5 w-5" style={{ color: "var(--accent)" }} />
               <div>
@@ -331,7 +361,7 @@ export default function WillPage() {
             </div>
           </Card>
 
-          <Card padding="md" hover className="cursor-pointer opacity-50">
+          <Card padding="md" className="opacity-50">
             <div className="flex items-center gap-3">
               <Sparkles className="h-5 w-5" style={{ color: "var(--accent)" }} />
               <div>

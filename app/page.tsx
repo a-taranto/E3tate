@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import EstateReadinessScore from "@/components/dashboard/EstateReadinessScore";
 import { Card, Button, StatusIndicator, Badge } from "@/components/ui";
+import { getVaultStats, getBeneficiaryStats, loadSettings, type ExecutionStatus } from "@/lib/store";
 import {
   FileText,
   Users,
@@ -26,10 +28,45 @@ export default function DashboardPage() {
   };
 
   const vaultStats = {
-    totalRecords: 24,
     lastUpdated: "2 hours ago",
-    executionStatus: "armed" as const,
   };
+
+  // Live counts from the unified store (replaces the old hardcoded mock numbers).
+  const [vault, setVault] = useState({ totalRecords: 0, primaryCategoryCount: 0 });
+  const [people, setPeople] = useState({
+    total: 0,
+    executors: 0,
+    beneficiaries: 0,
+    observers: 0,
+    pending: 0,
+  });
+  const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>("armed");
+
+  useEffect(() => {
+    const refresh = () => {
+      setVault(getVaultStats());
+      setPeople(getBeneficiaryStats());
+      setExecutionStatus(loadSettings().executionStatus);
+    };
+    refresh();
+    window.addEventListener("store-updated", refresh);
+    return () => window.removeEventListener("store-updated", refresh);
+  }, []);
+
+  const roleSummary =
+    [
+      people.executors > 0
+        ? `${people.executors} executor${people.executors === 1 ? "" : "s"}`
+        : null,
+      people.beneficiaries > 0
+        ? `${people.beneficiaries} beneficiar${people.beneficiaries === 1 ? "y" : "ies"}`
+        : null,
+      people.observers > 0
+        ? `${people.observers} observer${people.observers === 1 ? "" : "s"}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(", ") || "No one added yet";
 
   const quickActions = [
     { label: "Add Record", icon: Plus, href: "/vault" },
@@ -149,7 +186,7 @@ export default function DashboardPage() {
             <Shield className="h-6 w-6 text-accent" />
             <div>
               <h3 className="font-medium text-lg mb-1">Execution Status</h3>
-              <StatusIndicator status={vaultStats.executionStatus} size="md" />
+              <StatusIndicator status={executionStatus} size="md" />
             </div>
           </div>
           <Button variant="secondary" size="sm" onClick={() => router.push("/triggers")}>
@@ -165,12 +202,12 @@ export default function DashboardPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-text-muted text-sm mb-2">Total Records</p>
-              <p className="text-4xl font-semibold">{vaultStats.totalRecords}</p>
+              <p className="text-4xl font-semibold">{vault.totalRecords}</p>
             </div>
             <FileText className="h-8 w-8 text-accent" strokeWidth={1.5} />
           </div>
           <p className="text-text-muted text-sm mt-4">
-            Across 6 categories
+            Across {vault.primaryCategoryCount} categor{vault.primaryCategoryCount === 1 ? "y" : "ies"}
           </p>
         </Card>
 
@@ -178,12 +215,12 @@ export default function DashboardPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-text-muted text-sm mb-2">Beneficiaries</p>
-              <p className="text-4xl font-semibold">5</p>
+              <p className="text-4xl font-semibold">{people.total}</p>
             </div>
             <Users className="h-8 w-8 text-accent" strokeWidth={1.5} />
           </div>
           <p className="text-text-muted text-sm mt-4">
-            3 executors, 2 observers
+            {roleSummary}
           </p>
         </Card>
 
