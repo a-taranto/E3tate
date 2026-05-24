@@ -20,6 +20,8 @@ import DocumentViewer from "@/components/ui/DocumentViewer";
 import { VaultCard } from "@/components/vault/VaultCard";
 import { documentTypes } from "@/lib/documentConfig";
 import { loadVaultRecords, deleteVaultRecord, updateVaultRecord } from "@/lib/store";
+import { toast } from "@/components/ui/Toaster";
+import ComingSoon from "@/components/ui/ComingSoon";
 import {
   FileText,
   Wallet,
@@ -97,6 +99,7 @@ interface VaultRecord {
   createdAt: string;
   scope?: string;
   encrypted: boolean;
+  source?: "profile" | "vault" | "setup";
   fileType?: string;
   fileSize?: string;
   profileLinked?: boolean; // Indicates this record is from Profile page
@@ -121,12 +124,16 @@ export default function VaultPage() {
   const [initialRecordType, setInitialRecordType] = useState<RecordType | "">("");
   const [searchQuery, setSearchQuery] = useState("");
   const [records, setRecords] = useState<VaultRecord[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const [viewingDocument, setViewingDocument] = useState<{ docType: string; fileName: string; fileData: string } | null>(null);
 
   // Load all vault records from the unified store (seeded + migrated on boot).
   useEffect(() => {
-    const refresh = () => setRecords(loadVaultRecords());
+    const refresh = () => {
+      setRecords(loadVaultRecords());
+      setLoaded(true);
+    };
     refresh();
     window.addEventListener("store-updated", refresh);
     window.addEventListener("documentUploaded", refresh);
@@ -169,6 +176,7 @@ export default function VaultPage() {
       return;
     }
     setRecords(deleteVaultRecord(recordId));
+    toast("Record deleted", "info");
     if (selectedRecord?.id === recordId) {
       setIsDetailOpen(false);
       setSelectedRecord(null);
@@ -228,8 +236,9 @@ export default function VaultPage() {
     // Add encrypted badge
     if (record.encrypted) tags.push("Encrypted");
 
-    // Add profile linked badge
+    // Add provenance badge
     if (record.profileLinked) tags.push("From Profile");
+    else if (record.source === "setup") tags.push("From Setup");
 
     // Format date
     const formatDate = (dateStr: string) => {
@@ -531,7 +540,11 @@ export default function VaultPage() {
       </div>
 
       {/* Records Grid */}
-      {filteredRecords.length > 0 ? (
+      {!loaded ? (
+        <div className="text-center py-16">
+          <p className="text-stone-500 text-sm">Loading…</p>
+        </div>
+      ) : filteredRecords.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredRecords.map((record) => (
             <VaultCard
@@ -547,12 +560,16 @@ export default function VaultPage() {
             <FileText className="w-8 h-8 text-stone-400" />
           </div>
           <h3 className="text-stone-900 font-medium">
-            {searchQuery ? "No records found" : "No documents yet"}
+            {searchQuery
+              ? "No records found"
+              : selectedType === "all"
+                ? "No records yet"
+                : `No ${recordTypeConfig[selectedType as RecordType].label} yet`}
           </h3>
           <p className="text-stone-500 text-sm mt-1">
             {searchQuery
               ? `No records match "${searchQuery}". Try a different search term.`
-              : "Add your first document to securely store important files."}
+              : "Add a record to securely store important information."}
           </p>
           {!searchQuery && (
             <Button
@@ -730,9 +747,10 @@ export default function VaultPage() {
                   </div>
                 ))}
               </div>
-              <Button variant="secondary" size="sm" className="mt-3" disabled title="Coming soon">
+              <Button variant="secondary" size="sm" className="mt-3" disabled>
                 <Plus className="h-4 w-4" />
                 Add Beneficiary
+                <ComingSoon />
               </Button>
             </div>
 
@@ -827,19 +845,22 @@ export default function VaultPage() {
                     variant="ghost"
                     style={{ color: "var(--error)" }}
                     onClick={() => handleDeleteRecord(selectedRecord.id)}
+                    aria-label="Delete record"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button variant="primary" className="flex-1" disabled title="Coming soon">
+                  <Button variant="primary" className="flex-1" disabled>
                     <Edit className="h-4 w-4" />
                     Edit Record
+                    <ComingSoon />
                   </Button>
                   <Button
                     variant="secondary"
                     title="Copy record details"
+                    aria-label="Copy record details"
                     onClick={() =>
                       navigator.clipboard?.writeText(
                         `${selectedRecord.title}${selectedRecord.description ? ` — ${selectedRecord.description}` : ""}`
@@ -852,6 +873,7 @@ export default function VaultPage() {
                     variant="ghost"
                     style={{ color: "var(--error)" }}
                     onClick={() => handleDeleteRecord(selectedRecord.id)}
+                    aria-label="Delete record"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

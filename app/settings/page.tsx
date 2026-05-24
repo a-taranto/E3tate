@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import { Card, Button, Badge, Input } from "@/components/ui";
-import { loadSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/store";
+import { loadSettings, saveSettings, getCheckInStatus, checkIn, DEFAULT_SETTINGS, type AppSettings } from "@/lib/store";
 import { logActivity } from "@/lib/activityLogger";
+import { toast } from "@/components/ui/Toaster";
+import ComingSoon from "@/components/ui/ComingSoon";
 import {
   Shield,
   Smartphone,
@@ -45,6 +47,17 @@ export default function SettingsPage() {
     localStorage.clear();
     window.location.href = "/";
   };
+
+  const handleCheckIn = () => {
+    setSettings(checkIn());
+    logActivity("Checked In", "system", "Proof-of-life check-in");
+    toast("Checked in — timer reset");
+  };
+
+  const ci = getCheckInStatus();
+  const checkInLabel = ci.overdue
+    ? `Overdue by ${Math.abs(ci.daysRemaining)} day${Math.abs(ci.daysRemaining) === 1 ? "" : "s"}`
+    : `Next check-in: ${ci.nextDate} (in ${ci.daysRemaining} day${ci.daysRemaining === 1 ? "" : "s"})`;
 
   // Mock data
   const securitySettings = {
@@ -146,11 +159,13 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <Button variant="secondary" size="sm" disabled title="Coming soon">
+              <Button variant="secondary" size="sm" disabled>
                 Change Email
+                <ComingSoon />
               </Button>
-              <Button variant="secondary" size="sm" disabled title="Coming soon">
+              <Button variant="secondary" size="sm" disabled>
                 Change Password
+                <ComingSoon />
               </Button>
             </div>
           </div>
@@ -169,8 +184,9 @@ export default function SettingsPage() {
                 <Badge variant="success">Enabled</Badge>
               </div>
             </div>
-            <Button variant="secondary" size="sm" disabled title="Coming soon">
+            <Button variant="secondary" size="sm" disabled>
               Manage MFA
+              <ComingSoon />
             </Button>
           </div>
         </Card>
@@ -201,8 +217,9 @@ export default function SettingsPage() {
                           </p>
                         </div>
                       </div>
-                      <Button variant="ghost" size="sm" disabled title="Coming soon">
+                      <Button variant="ghost" size="sm" disabled>
                         Remove
+                        <ComingSoon />
                       </Button>
                     </div>
                   ))}
@@ -233,8 +250,9 @@ export default function SettingsPage() {
                 </p>
               </div>
             </div>
-            <Button variant="secondary" size="sm" disabled title="Coming soon">
+            <Button variant="secondary" size="sm" disabled>
               Reconfigure Shards
+              <ComingSoon />
             </Button>
           </div>
         </Card>
@@ -262,13 +280,15 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <Button variant="secondary" size="sm" disabled title="Coming soon">
+              <Button variant="secondary" size="sm" disabled>
                 <Download className="h-4 w-4" />
                 Download Backup
+                <ComingSoon />
               </Button>
-              <Button variant="ghost" size="sm" disabled title="Coming soon">
+              <Button variant="ghost" size="sm" disabled>
                 <Upload className="h-4 w-4" />
                 Restore Backup
+                <ComingSoon />
               </Button>
             </div>
           </div>
@@ -329,12 +349,20 @@ export default function SettingsPage() {
                       <option value={180}>180 days</option>
                     </select>
                   </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: "var(--success)", backgroundColor: "var(--success-bg)" }}>
+                  <div
+                    className="flex items-center justify-between p-3 rounded-lg border"
+                    style={{
+                      borderColor: ci.overdue ? "var(--warning)" : "var(--success)",
+                      backgroundColor: ci.overdue ? "var(--warning-bg)" : "var(--success-bg)",
+                    }}
+                  >
                     <div>
                       <p className="text-sm font-medium">Status</p>
-                      <p className="text-xs text-text-muted">Next check-in: 23 days</p>
+                      <p className="text-xs text-text-muted">{checkInLabel}</p>
                     </div>
-                    <Badge variant="success">Active</Badge>
+                    <Button variant="secondary" size="sm" onClick={handleCheckIn}>
+                      Check in now
+                    </Button>
                   </div>
                 </div>
               </div>

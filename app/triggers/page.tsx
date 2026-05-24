@@ -5,6 +5,8 @@ import Header from "@/components/layout/Header";
 import { Card, Button, Badge, StatusIndicator } from "@/components/ui";
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/store";
 import { logActivity } from "@/lib/activityLogger";
+import { toast } from "@/components/ui/Toaster";
+import ComingSoon from "@/components/ui/ComingSoon";
 import {
   Zap,
   Clock,
@@ -38,6 +40,7 @@ export default function TriggersPage() {
         ? "All execution triggers armed"
         : "All execution triggers disarmed"
     );
+    toast(next === "armed" ? "Triggers armed" : "Triggers disarmed", "info");
   };
 
   const toggleTrigger = (id: string, name: string, enabled: boolean) => {
@@ -189,9 +192,10 @@ export default function TriggersPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Trigger Configuration</h2>
-          <Button variant="secondary" size="sm" disabled title="Coming soon">
+          <Button variant="secondary" size="sm" disabled>
             <SettingsIcon className="h-4 w-4" />
             Configure
+            <ComingSoon />
           </Button>
         </div>
 
@@ -242,6 +246,7 @@ export default function TriggersPage() {
                       type="checkbox"
                       className="sr-only peer"
                       checked={enabled}
+                      aria-label={`Toggle ${trigger.name}`}
                       onChange={(e) => toggleTrigger(String(trigger.id), trigger.name, e.target.checked)}
                     />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
@@ -262,11 +267,13 @@ export default function TriggersPage() {
 
                 {/* Actions */}
                 <div className="flex gap-2 mt-4">
-                  <Button variant="secondary" size="sm" disabled title="Coming soon">
+                  <Button variant="secondary" size="sm" disabled>
                     Edit Configuration
+                    <ComingSoon />
                   </Button>
-                  <Button variant="ghost" size="sm" disabled title="Coming soon">
+                  <Button variant="ghost" size="sm" disabled>
                     Test Trigger
+                    <ComingSoon />
                   </Button>
                 </div>
               </div>

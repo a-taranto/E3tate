@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { loadSettings } from "@/lib/store";
+import { loadSettings, getCheckInStatus } from "@/lib/store";
 import {
   LayoutDashboard,
   Vault,
@@ -15,6 +15,7 @@ import {
   Shield,
   HelpCircle,
   ScrollText,
+  Menu,
 } from "lucide-react";
 
 const navigation = [
@@ -32,14 +33,21 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [armed, setArmed] = useState(true);
-  const [checkInDays, setCheckInDays] = useState(30);
+  const [checkInLabel, setCheckInLabel] = useState("");
   const [profileName, setProfileName] = useState("");
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const refresh = () => {
       const s = loadSettings();
       setArmed(s.executionStatus === "armed");
-      setCheckInDays(s.checkInFrequency);
+      const ci = getCheckInStatus();
+      const overdueDays = Math.abs(ci.daysRemaining);
+      setCheckInLabel(
+        ci.overdue
+          ? `Check-in overdue by ${overdueDays} day${overdueDays === 1 ? "" : "s"}`
+          : `Next check-in: ${ci.nextDate}`
+      );
       try {
         const info = JSON.parse(localStorage.getItem("setup_personal_info") || "{}");
         setProfileName(info.fullName || "");
@@ -62,13 +70,42 @@ export default function Sidebar() {
       .toUpperCase() || "U";
 
   return (
-    <aside
-      className="fixed left-0 top-0 z-40 h-screen w-64 border-r"
-      style={{
-        backgroundColor: "var(--bg-sidebar)",
-        borderColor: "rgba(255, 255, 255, 0.1)",
-      }}
-    >
+    <>
+      {/* Mobile hamburger (hidden while the drawer is open) */}
+      {!open && (
+        <button
+          type="button"
+          aria-label="Open menu"
+          onClick={() => setOpen(true)}
+          className="fixed top-3 left-3 z-50 rounded-md p-2 md:hidden"
+          style={{
+            backgroundColor: "var(--bg-sidebar)",
+            color: "var(--text-inverse)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+          }}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* Mobile overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 z-40 h-screen w-64 border-r transform transition-transform duration-200 md:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{
+          backgroundColor: "var(--bg-sidebar)",
+          borderColor: "rgba(255, 255, 255, 0.1)",
+        }}
+      >
       <div className="flex h-full flex-col">
         {/* Logo/Brand */}
         <div
@@ -110,6 +147,7 @@ export default function Sidebar() {
               <Link
                 key={item.name}
                 href={item.href}
+                onClick={() => setOpen(false)}
                 className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all"
                 style={{
                   backgroundColor: isActive ? "var(--accent-dim)" : "transparent",
@@ -153,8 +191,8 @@ export default function Sidebar() {
               {armed ? "Active" : "Paused"}
             </span>
           </div>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Next check-in: {checkInDays} days
+          <p className="text-xs" style={{ color: armed ? "var(--text-muted)" : "var(--warning)" }}>
+            {checkInLabel}
           </p>
         </div>
 
@@ -190,6 +228,7 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import Button from "./Button";
 
@@ -48,6 +48,12 @@ export default function SlideOverPanel({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
 
+  // Move focus into the panel when it opens, so keyboard users land inside it.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isOpen) panelRef.current?.focus();
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -56,11 +62,17 @@ export default function SlideOverPanel({
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Panel */}
       <div
-        className={`fixed right-0 top-0 h-full ${widthClasses[width]} w-full z-50 transform transition-transform duration-300 ease-in-out shadow-lg`}
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        className={`fixed right-0 top-0 h-full ${widthClasses[width]} w-full z-50 transform transition-transform duration-300 ease-in-out shadow-lg outline-none`}
         style={{ backgroundColor: "var(--bg-secondary)" }}
       >
         <div className="h-full flex flex-col">
@@ -72,7 +84,7 @@ export default function SlideOverPanel({
             <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
               {title}
             </h2>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close panel">
               <X className="h-5 w-5" />
             </Button>
           </div>

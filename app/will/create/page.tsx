@@ -19,6 +19,7 @@ import {
 import type { WillTemplate } from "@/types";
 import { logActivity } from "@/lib/activityLogger";
 import { loadBeneficiaries, type Beneficiary } from "@/lib/store";
+import ComingSoon from "@/components/ui/ComingSoon";
 
 export default function CreateWillPage() {
   const router = useRouter();
@@ -370,8 +371,9 @@ export default function CreateWillPage() {
                   <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
                     No specific gifts added yet
                   </p>
-                  <Button variant="primary" disabled title="Coming soon">
+                  <Button variant="primary" disabled>
                     + Add Gift from Vault
+                    <ComingSoon />
                   </Button>
                 </div>
               </div>

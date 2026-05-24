@@ -541,6 +541,7 @@ export interface AppSettings {
   notifyActivity: boolean;
   executionStatus: ExecutionStatus;
   triggersEnabled: Record<string, boolean>; // trigger id -> enabled
+  lastCheckIn?: string; // ISO timestamp of the last proof-of-life check-in
 }
 
 const SETTINGS_KEY = "app_settings";
@@ -571,4 +572,29 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
     dispatchUpdate();
   }
   return next;
+}
+
+export interface CheckInStatus {
+  nextDate: string; // localized display date of the next required check-in
+  daysRemaining: number; // negative when overdue
+  overdue: boolean;
+}
+
+// Derives the next proof-of-life check-in from the last check-in + cadence.
+// Treats "never checked in" as a check-in today, so a fresh user sees a full window.
+export function getCheckInStatus(): CheckInStatus {
+  const s = loadSettings();
+  const last = s.lastCheckIn ? new Date(s.lastCheckIn) : new Date();
+  const next = new Date(last);
+  next.setDate(next.getDate() + s.checkInFrequency);
+  const daysRemaining = Math.ceil((next.getTime() - Date.now()) / 86_400_000);
+  return {
+    nextDate: next.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }),
+    daysRemaining,
+    overdue: daysRemaining < 0,
+  };
+}
+
+export function checkIn(): AppSettings {
+  return saveSettings({ lastCheckIn: new Date().toISOString() });
 }

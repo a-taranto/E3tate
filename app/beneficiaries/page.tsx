@@ -16,9 +16,14 @@ import {
   Check,
 } from "lucide-react";
 import { loadBeneficiaries, saveBeneficiaries, type Beneficiary } from "@/lib/store";
+import { toast } from "@/components/ui/Toaster";
+import ComingSoon from "@/components/ui/ComingSoon";
+
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
 export default function BeneficiariesPage() {
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -30,7 +35,10 @@ export default function BeneficiariesPage() {
 
   // Load beneficiaries from the unified store (seeded + migrated on app boot).
   useEffect(() => {
-    const refresh = () => setBeneficiaries(loadBeneficiaries());
+    const refresh = () => {
+      setBeneficiaries(loadBeneficiaries());
+      setLoaded(true);
+    };
     refresh();
     window.addEventListener("store-updated", refresh);
     return () => window.removeEventListener("store-updated", refresh);
@@ -54,7 +62,7 @@ export default function BeneficiariesPage() {
   };
 
   const submitForm = () => {
-    if (!form.name.trim() || !form.email.trim()) return;
+    if (!form.name.trim() || !isValidEmail(form.email)) return;
     let updated: Beneficiary[];
     if (editingId) {
       updated = beneficiaries.map((b) => (b.id === editingId ? { ...b, ...form } : b));
@@ -79,6 +87,7 @@ export default function BeneficiariesPage() {
       "beneficiary",
       `${form.name} (${form.role})`
     );
+    toast(editingId ? "Beneficiary updated" : "Beneficiary added");
     setShowForm(false);
     setEditingId(null);
   };
@@ -89,6 +98,7 @@ export default function BeneficiariesPage() {
     setBeneficiaries(updated);
     saveBeneficiaries(updated);
     logActivity("Beneficiary Removed", "beneficiary", person.name);
+    toast(`${person.name} removed`, "info");
   };
 
   const roleConfig = {
@@ -148,6 +158,7 @@ export default function BeneficiariesPage() {
               placeholder="jane@example.com"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
+              error={form.email && !isValidEmail(form.email) ? "Enter a valid email address" : undefined}
               required
             />
             <div>
@@ -175,7 +186,7 @@ export default function BeneficiariesPage() {
             <Button
               variant="primary"
               onClick={submitForm}
-              disabled={!form.name.trim() || !form.email.trim()}
+              disabled={!form.name.trim() || !isValidEmail(form.email)}
             >
               <Check className="h-4 w-4" />
               {editingId ? "Save Changes" : "Add Beneficiary"}
@@ -241,7 +252,11 @@ export default function BeneficiariesPage() {
 
       {/* Beneficiaries List */}
       <div className="space-y-3">
-        {beneficiaries.length === 0 ? (
+        {!loaded ? (
+          <Card className="text-center py-12">
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading…</p>
+          </Card>
+        ) : beneficiaries.length === 0 ? (
           <Card className="text-center py-12">
             <div className="mb-4">
               <div
@@ -307,6 +322,7 @@ export default function BeneficiariesPage() {
                       size="sm"
                       onClick={() => removeBeneficiary(person)}
                       title="Remove beneficiary"
+                      aria-label="Remove beneficiary"
                     >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
@@ -334,8 +350,9 @@ export default function BeneficiariesPage() {
                   <Button variant="secondary" size="sm" onClick={() => openEdit(person)}>
                     Edit
                   </Button>
-                  <Button variant="ghost" size="sm" disabled title="Coming soon">
+                  <Button variant="ghost" size="sm" disabled>
                     View Details
+                    <ComingSoon />
                   </Button>
                   {person.status === "pending" && (
                     <Button
@@ -344,7 +361,7 @@ export default function BeneficiariesPage() {
                       className="text-accent"
                       onClick={() => {
                         logActivity("Invite Sent", "beneficiary", `Invitation sent to ${person.name}`);
-                        alert(`Invitation sent to ${person.email}`);
+                        toast(`Invitation sent to ${person.email}`);
                       }}
                     >
                       <Mail className="h-3.5 w-3.5" />
