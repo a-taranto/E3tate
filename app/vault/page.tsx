@@ -19,7 +19,16 @@ import {
 import DocumentViewer from "@/components/ui/DocumentViewer";
 import { VaultCard } from "@/components/vault/VaultCard";
 import { documentTypes } from "@/lib/documentConfig";
-import { loadVaultRecords, deleteVaultRecord, updateVaultRecord } from "@/lib/store";
+import {
+  loadVaultRecords,
+  deleteVaultRecord,
+  updateVaultRecord,
+  loadAssets,
+  addAsset,
+  updateAsset,
+  type EstateAsset,
+  type EstateAssetType,
+} from "@/lib/store";
 import { toast } from "@/components/ui/Toaster";
 import ComingSoon from "@/components/ui/ComingSoon";
 import {
@@ -132,6 +141,7 @@ export default function VaultPage() {
   const [initialRecordType, setInitialRecordType] = useState<RecordType | "">("");
   const [searchQuery, setSearchQuery] = useState("");
   const [records, setRecords] = useState<VaultRecord[]>([]);
+  const [assets, setAssets] = useState<EstateAsset[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const [viewingDocument, setViewingDocument] = useState<{ docType: string; fileName: string; fileData: string } | null>(null);
@@ -140,6 +150,7 @@ export default function VaultPage() {
   useEffect(() => {
     const refresh = () => {
       setRecords(loadVaultRecords());
+      setAssets(loadAssets());
       setLoaded(true);
     };
     refresh();
@@ -150,6 +161,39 @@ export default function VaultPage() {
       window.removeEventListener("documentUploaded", refresh);
     };
   }, []);
+
+  // Once every "Other record" is linked to an asset, the bucket is empty — fall
+  // back to the Documents view so the (now-gone) tab isn't left selected.
+  useEffect(() => {
+    if (view === "other" && !records.some((r) => !isDocument(r.type) && !r.metadata?.assetId)) {
+      setView("documents");
+    }
+  }, [view, records]);
+
+  // Link an "Other record" (a legacy credential/wallet) to an asset — the same
+  // bidirectional link the asset form uses (asset.vaultRecordId <-> record
+  // metadata.assetId). Once linked it leaves the Other-records bucket and shows
+  // with its asset.
+  const linkRecordToAsset = (recordId: string, assetId: string) => {
+    const rec = records.find((r) => r.id === recordId);
+    updateVaultRecord(recordId, { metadata: { ...(rec?.metadata || {}), assetId } });
+    updateAsset(assetId, { vaultRecordId: recordId });
+    setRecords(loadVaultRecords());
+    setAssets(loadAssets());
+    toast("Linked to asset", "success");
+  };
+
+  const createAssetFromRecord = (recordId: string) => {
+    const rec = records.find((r) => r.id === recordId);
+    if (!rec) return;
+    const assetId = Date.now().toString();
+    const type: EstateAssetType = rec.type === "wallets" ? "digital" : "bank";
+    addAsset({ id: assetId, type, title: rec.title, beneficiaryIds: [], vaultRecordId: recordId, source: "manual" });
+    updateVaultRecord(recordId, { metadata: { ...(rec.metadata || {}), assetId } });
+    setRecords(loadVaultRecords());
+    setAssets(loadAssets());
+    toast(`Created asset “${rec.title}” and linked this record`, "success");
+  };
 
   // Handle viewing a document (reads the file blob the store keeps on the record)
   const handleViewDocument = (recordId: string) => {
@@ -198,12 +242,15 @@ export default function VaultPage() {
 
   const allRecords: VaultRecord[] = records;
 
+  // "Other records" = legacy non-document records NOT yet linked to an asset.
+  // Linking one files it with its asset, so it leaves this bucket.
+  const isOther = (r: VaultRecord) => !isDocument(r.type) && !r.metadata?.assetId;
   const documentCount = allRecords.filter((r) => isDocument(r.type)).length;
-  const otherCount = allRecords.length - documentCount;
+  const otherCount = allRecords.filter(isOther).length;
 
   // Filter records by the active view (Documents vs. Other records) + search.
   const filteredRecords = allRecords.filter((record) => {
-    const matchesView = view === "documents" ? isDocument(record.type) : !isDocument(record.type);
+    const matchesView = view === "documents" ? isDocument(record.type) : isOther(record);
     const matchesSearch = record.title.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesView && matchesSearch;
   });
@@ -546,11 +593,9 @@ export default function VaultPage() {
                 Financial logins, wallets &amp; online accounts have moved
               </p>
               <p>
-                These now live with the thing they belong to — under{" "}
-                <button className="underline" style={{ color: "var(--accent)" }} onClick={() => router.push("/vault/assets")}>Assets</button>{" "}
-                and{" "}
-                <button className="underline" style={{ color: "var(--accent)" }} onClick={() => router.push("/vault/online")}>Accounts &amp; Online</button>.
-                The records below are kept here until you move them.
+                These belong with the thing they secure. Link each record below to an{" "}
+                <button className="underline" style={{ color: "var(--accent)" }} onClick={() => router.push("/vault/assets")}>asset</button>{" "}
+                to file it away — it will then show with that asset and leave this list.
               </p>
             </div>
           </div>
@@ -563,15 +608,59 @@ export default function VaultPage() {
           <p className="text-stone-500 text-sm">Loading…</p>
         </div>
       ) : filteredRecords.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredRecords.map((record) => (
-            <VaultCard
-              key={record.id}
-              record={transformRecordForCard(record)}
-              onClick={() => handleViewRecord(record)}
-            />
-          ))}
-        </div>
+        view === "other" ? (
+          <div className="space-y-3">
+            {filteredRecords.map((record) => (
+              <Card key={record.id} padding="md">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate" style={{ color: "var(--text-primary)" }}>{record.title}</p>
+                    <p className="text-xs capitalize" style={{ color: "var(--text-muted)" }}>
+                      {recordTypeConfig[record.type]?.label?.replace(" (Legacy)", "") || record.type}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <select
+                      className="input text-sm"
+                      value=""
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "__new__") createAssetFromRecord(record.id);
+                        else if (v) linkRecordToAsset(record.id, v);
+                      }}
+                      aria-label={`Link ${record.title} to an asset`}
+                    >
+                      <option value="">Link to an asset…</option>
+                      {assets.map((a) => (
+                        <option key={a.id} value={a.id}>{a.title}</option>
+                      ))}
+                      <option value="__new__">+ Create matching asset</option>
+                    </select>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      style={{ color: "var(--error)" }}
+                      onClick={() => handleDeleteRecord(record.id)}
+                      aria-label={`Delete ${record.title}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredRecords.map((record) => (
+              <VaultCard
+                key={record.id}
+                record={transformRecordForCard(record)}
+                onClick={() => handleViewRecord(record)}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-center py-16">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-stone-100 flex items-center justify-center">
