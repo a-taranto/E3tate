@@ -390,9 +390,12 @@ export default function SetupAssetsPage() {
             const assignedBeneficiaries = beneficiaries.filter(
               (b) => b.role === "beneficiary" && asset.beneficiaryIds.includes(b.id)
             );
-            const linked = asset.vaultRecordId
-              ? vaultRecords.find((r) => r.id === asset.vaultRecordId)
-              : undefined;
+            // The asset is the hub: show every vault record linked to it — its
+            // account/credentials and any documents — so crypto (or a bank
+            // account) reads as one asset with its access + papers attached.
+            const linkedRecords = vaultRecords.filter(
+              (r) => r.metadata?.assetId === asset.id || (!!asset.vaultRecordId && r.id === asset.vaultRecordId)
+            );
 
             return (
               <Card key={asset.id} padding="md">
@@ -440,17 +443,18 @@ export default function SetupAssetsPage() {
                           </span>
                         );
                       })}
-                      {linked && (
+                      {linkedRecords.map((rec) => (
                         <button
-                          onClick={() => router.push("/vault")}
+                          key={rec.id}
+                          onClick={() => router.push(rec.type === "documents" ? "/vault" : "/vault/online")}
                           className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-colors hover:opacity-80"
                           style={{ backgroundColor: "var(--bg-secondary)", color: "var(--text-secondary)" }}
-                          title="Access/custody for this asset lives in your vault"
+                          title={rec.type === "documents" ? "Linked document" : "Linked account / access"}
                         >
                           <Link2 className="h-3 w-3" />
-                          {linked.title}
+                          {rec.title}
                         </button>
-                      )}
+                      ))}
                     </div>
 
                     <div className="flex gap-2 mt-2">

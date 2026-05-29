@@ -120,6 +120,7 @@ interface VaultRecord {
   fileType?: string;
   fileSize?: string;
   profileLinked?: boolean; // Indicates this record is from Profile page
+  serviceId?: string; // set on records created from an Accounts & Online service
   metadata?: Record<string, any>; // carries uploaded-file blobs: metadata.file
 }
 
@@ -244,7 +245,10 @@ export default function VaultPage() {
 
   // "Other records" = legacy non-document records NOT yet linked to an asset.
   // Linking one files it with its asset, so it leaves this bucket.
-  const isOther = (r: VaultRecord) => !isDocument(r.type) && !r.metadata?.assetId;
+  // "Other records" = legacy credential/wallet records that belong with an asset
+  // but aren't yet linked. Service accounts (Dropbox, iCloud, email, exchanges…)
+  // are excluded — those are managed under Accounts & Online, not orphans.
+  const isOther = (r: VaultRecord) => !isDocument(r.type) && !r.metadata?.assetId && !r.serviceId;
   const documentCount = allRecords.filter((r) => isDocument(r.type)).length;
   const otherCount = allRecords.filter(isOther).length;
 
@@ -486,7 +490,7 @@ export default function VaultPage() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div>
       <Header
         title="Documents"
         subtitle="Your important files — deeds, certificates, policies, and your signed will"
