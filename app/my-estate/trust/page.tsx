@@ -141,7 +141,7 @@ export default function TestamentaryTrustPage() {
               </p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {form.acknowledged_warning
-                  ? "Adds the Schedule 3 clauses after your residuary estate."
+                  ? "Adds the trust clauses to your will, after the residuary estate."
                   : "Acknowledge the warning above to enable this."}
               </p>
             </div>
