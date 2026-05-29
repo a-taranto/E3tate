@@ -16,6 +16,7 @@ import {
   Vault,
   Bitcoin,
   Package,
+  Umbrella,
   Plus,
   Trash2,
   ArrowRight,
@@ -39,6 +40,7 @@ import {
   type VaultRecord,
   type VaultType,
 } from "@/lib/store";
+import { type FieldDef } from "@/components/digital/RegisterSection";
 
 // The full first-class asset catalog (Phase A2). Each tile doubles as a
 // quick-add affordance and as the type picker inside the form.
@@ -52,6 +54,7 @@ const ASSET_TYPES: {
   { type: "real-property", label: "Real Property", description: "Homes, land, investment properties", icon: Home, color: "#10B981" },
   { type: "bank", label: "Bank Account", description: "Cheque, savings, term deposits", icon: Building2, color: "#8B5CF6" },
   { type: "super", label: "Superannuation", description: "Super funds, pensions", icon: DollarSign, color: "#F59E0B" },
+  { type: "life-insurance", label: "Life Insurance", description: "Term life, TPD, trauma cover", icon: Umbrella, color: "#0D9488" },
   { type: "shares", label: "Shares & Investments", description: "Listed shares, managed funds", icon: TrendingUp, color: "#0EA5E9" },
   { type: "vehicle", label: "Vehicle", description: "Cars, motorcycles, boats", icon: Car, color: "#3B82F6" },
   { type: "digital", label: "Digital / Crypto", description: "Cryptocurrency, online wallets", icon: Bitcoin, color: "#F97316" },
@@ -66,6 +69,81 @@ const ASSET_TYPES: {
 const typeMeta = (t: EstateAssetType) =>
   ASSET_TYPES.find((x) => x.type === t) ?? ASSET_TYPES[ASSET_TYPES.length - 1];
 
+// Type-specific detail fields (stored in EstateAsset.details) so the Asset &
+// Liability Inventory annexure can carry the same particulars as the MetaLaw
+// Schedule 1 — BSB, BDBN status, policy numbers, registration, etc. Types not
+// listed here just use the common title / institution / value fields.
+const ASSET_DETAIL_FIELDS: Partial<Record<EstateAssetType, FieldDef[]>> = {
+  "real-property": [
+    {
+      key: "ownership",
+      label: "Ownership",
+      type: "select",
+      half: true,
+      options: [
+        { value: "sole", label: "Sole" },
+        { value: "joint_tenants", label: "Joint tenants" },
+        { value: "tenants_in_common", label: "Tenants in common" },
+      ],
+    },
+    { key: "title_reference", label: "Title reference / Lot-Plan", half: true, placeholder: "e.g. 12/SP54321" },
+  ],
+  bank: [
+    { key: "bsb", label: "BSB", half: true, placeholder: "e.g. 012-345" },
+    { key: "account_number", label: "Account number", half: true },
+    { key: "account_type", label: "Account type", half: true, placeholder: "e.g. Savings, Term deposit" },
+  ],
+  super: [
+    { key: "member_number", label: "Member number", half: true },
+    {
+      key: "bdbn_status",
+      label: "Binding nomination (BDBN)",
+      type: "select",
+      half: true,
+      options: [
+        { value: "yes", label: "Yes (lapsing)" },
+        { value: "non_lapsing", label: "Non-lapsing" },
+        { value: "no", label: "None" },
+      ],
+    },
+    { key: "bdbn_expiry", label: "BDBN expiry", half: true, placeholder: "e.g. 2027-06-30" },
+    { key: "nominated_beneficiary", label: "Nominated beneficiary", half: true },
+  ],
+  "life-insurance": [
+    { key: "policy_number", label: "Policy number", half: true },
+    {
+      key: "policy_type",
+      label: "Type",
+      type: "select",
+      half: true,
+      options: [
+        { value: "term_life", label: "Term life" },
+        { value: "tpd", label: "TPD" },
+        { value: "trauma", label: "Trauma" },
+        { value: "income_protection", label: "Income protection" },
+        { value: "whole_of_life", label: "Whole of life" },
+        { value: "other", label: "Other" },
+      ],
+    },
+    { key: "sum_insured", label: "Sum insured (AUD)", type: "number", half: true },
+    { key: "nominated_beneficiary", label: "Nominated beneficiary", half: true, placeholder: "e.g. Estate, spouse" },
+  ],
+  shares: [
+    { key: "registry_hin", label: "Registry / HIN / SRN", half: true },
+    { key: "holding", label: "Holding", half: true, placeholder: "e.g. 500 CBA shares" },
+  ],
+  business: [
+    { key: "abn", label: "ABN / ACN", half: true },
+    { key: "ownership_pct", label: "Your ownership %", half: true, placeholder: "e.g. 50%" },
+    { key: "entity_type", label: "Entity type", half: true, placeholder: "e.g. Pty Ltd, partnership" },
+  ],
+  vehicle: [
+    { key: "make_model", label: "Make & model", half: true, placeholder: "e.g. Toyota Camry" },
+    { key: "registration", label: "Registration", half: true },
+    { key: "year", label: "Year", half: true },
+  ],
+};
+
 const fmtAUD = (n?: number) =>
   typeof n === "number"
     ? n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 })
@@ -79,6 +157,7 @@ const EMPTY_FORM: Partial<EstateAsset> = {
   institution: "",
   beneficiaryIds: [],
   beneficiaryShares: {},
+  details: {},
   vaultRecordId: undefined,
 };
 
@@ -192,8 +271,16 @@ export default function SetupAssetsPage() {
       if (ids.includes(id) && typeof pct === "number") shares[id] = pct;
     }
 
+    // Keep only detail fields that belong to the chosen type and have a value
+    // (so changing type doesn't carry stale particulars).
+    const detailKeys = new Set((ASSET_DETAIL_FIELDS[formData.type ?? "other"] ?? []).map((f) => f.key));
+    const details: Record<string, string> = {};
+    for (const [k, v] of Object.entries(formData.details ?? {})) {
+      if (detailKeys.has(k) && String(v).trim()) details[k] = String(v).trim();
+    }
+
     if (editingId) {
-      updateAsset(editingId, { ...formData, beneficiaryShares: shares, vaultRecordId });
+      updateAsset(editingId, { ...formData, beneficiaryShares: shares, details, vaultRecordId });
     } else {
       addAsset({
         id: assetId,
@@ -203,6 +290,7 @@ export default function SetupAssetsPage() {
         estimatedValue: formData.estimatedValue,
         institution: formData.institution,
         jointlyOwned: formData.jointlyOwned,
+        details,
         beneficiaryIds: ids,
         beneficiaryShares: shares,
         vaultRecordId,
@@ -491,6 +579,47 @@ export default function SetupAssetsPage() {
                   />
                 </div>
               </div>
+
+              {(ASSET_DETAIL_FIELDS[(formData.type ?? "other") as EstateAssetType]?.length ?? 0) > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+                    Details
+                    <span className="font-normal" style={{ color: "var(--text-muted)" }}> — appear on your Asset & Liability Inventory</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {ASSET_DETAIL_FIELDS[(formData.type ?? "other") as EstateAssetType]!.map((f) => {
+                      const val = formData.details?.[f.key] ?? "";
+                      const onChange = (v: string) =>
+                        setFormData((prev) => ({ ...prev, details: { ...(prev.details ?? {}), [f.key]: v } }));
+                      return (
+                        <div key={f.key}>
+                          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+                            {f.label}
+                          </label>
+                          {f.type === "select" ? (
+                            <select className="input w-full" value={val} onChange={(e) => onChange(e.target.value)}>
+                              <option value="">Select…</option>
+                              {f.options?.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              className="input w-full"
+                              type={f.type === "number" ? "number" : "text"}
+                              placeholder={f.placeholder}
+                              value={val}
+                              onChange={(e) => onChange(e.target.value)}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>

@@ -203,29 +203,70 @@ function annexureSubtitle(): string {
 // Annexure A — Asset & Liability Inventory
 // ---------------------------------------------------------------------------
 
-// EstateAsset.type → inventory section. Order matters (drives section order).
+// EstateAsset.type → inventory section. Order mirrors MetaLaw Schedule 1.
 const ASSET_SECTIONS: { key: string; heading: string; types: EstateAssetType[] }[] = [
   { key: "property", heading: "1. Real Property", types: ["real-property"] },
   { key: "bank", heading: "2. Bank & Financial Accounts", types: ["bank"] },
   { key: "super", heading: "3. Superannuation", types: ["super"] },
   { key: "shares", heading: "4. Shares & Investments", types: ["shares"] },
-  { key: "business", heading: "5. Business Interests", types: ["business"] },
-  { key: "vehicle", heading: "6. Vehicles", types: ["vehicle"] },
+  { key: "life", heading: "5. Life Insurance", types: ["life-insurance"] },
+  { key: "business", heading: "6. Business Interests", types: ["business"] },
+  { key: "vehicle", heading: "7. Vehicles", types: ["vehicle"] },
   {
     key: "other",
-    heading: "7. Other Assets",
+    heading: "8. Other Assets",
     types: ["personal-effect", "ip", "debt-owed", "safe-contents", "digital", "other"],
   },
 ];
 
+// Short labels + ordering for the type-specific detail fields (EstateAsset.details).
+const DETAIL_LABELS: Record<string, string> = {
+  ownership: "Ownership",
+  title_reference: "Title",
+  bsb: "BSB",
+  account_number: "Acct",
+  account_type: "Type",
+  member_number: "Member",
+  bdbn_status: "BDBN",
+  bdbn_expiry: "BDBN expiry",
+  nominated_beneficiary: "Beneficiary",
+  policy_number: "Policy",
+  policy_type: "Type",
+  sum_insured: "Sum insured",
+  registry_hin: "Registry/HIN",
+  holding: "Holding",
+  abn: "ABN/ACN",
+  ownership_pct: "Ownership",
+  entity_type: "Entity",
+  make_model: "Make/model",
+  registration: "Rego",
+  year: "Year",
+};
+const DETAIL_ORDER = Object.keys(DETAIL_LABELS);
+
+const prettyDetail = (key: string, v: string): string => {
+  if (key === "sum_insured") {
+    const n = Number(v);
+    return isFinite(n) && n > 0 ? fmtAUD(n) : v;
+  }
+  // enum-style values (joint_tenants, non_lapsing, term_life…) → readable text
+  if (/^[a-z][a-z_]*$/.test(v)) return v.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  return v;
+};
+
+function detailSummary(a: EstateAsset): string {
+  const d = a.details;
+  if (!d) return "";
+  return DETAIL_ORDER.filter((k) => d[k])
+    .map((k) => `${DETAIL_LABELS[k]}: ${prettyDetail(k, d[k])}`)
+    .join(" · ");
+}
+
 function assetRow(a: EstateAsset): string[] {
-  const desc = a.description ? `${a.title} — ${a.description}` : a.title;
+  const parts = [a.description, detailSummary(a)].filter(Boolean);
+  const base = parts.length ? `${a.title} — ${parts.join(" · ")}` : a.title;
   const value = a.estimatedValue != null ? fmtAUD(a.estimatedValue) : "—";
-  return [
-    a.jointlyOwned ? `${desc}  (jointly owned)` : desc,
-    a.institution || "—",
-    value,
-  ];
+  return [a.jointlyOwned ? `${base}  (jointly owned)` : base, a.institution || "—", value];
 }
 
 export async function downloadAssetInventoryPdf(): Promise<void> {
@@ -244,7 +285,7 @@ export async function downloadAssetInventoryPdf(): Promise<void> {
   });
 
   sections.push({
-    heading: "8. Liabilities",
+    heading: "9. Liabilities",
     note: "Debts the executor must settle before distributing the estate.",
     headers: ["Liability", "Lender", "Outstanding balance"],
     colFracs: [0.45, 0.32, 0.23],
