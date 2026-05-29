@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
-import { Landmark, AlertTriangle } from "lucide-react";
+import { Landmark, AlertTriangle, ArrowRight } from "lucide-react";
 import { recommendTestamentaryTrust, type TrustRecommendation } from "@/lib/model/computations";
 
 // Schedule 3 — surfaces the testamentary-trust recommendation when the estate
 // warrants one (net > $500k, minor children + income assets, etc.). Read-only;
 // enabling the trust provisions is warning-gated in the (future) trust flow.
 export default function TrustRecommendationCard({ className = "" }: { className?: string }) {
+  const router = useRouter();
   const [rec, setRec] = useState<TrustRecommendation>({ level: "low", reasons: [] });
 
   useEffect(() => {
@@ -52,8 +54,9 @@ export default function TrustRecommendationCard({ className = "" }: { className?
               provisions before including them.
             </span>
           </div>
-          <Button variant="ghost" size="sm" className="mt-2" disabled title="Trust setup flow coming soon">
-            Learn about trust provisions
+          <Button variant="ghost" size="sm" className="mt-2" onClick={() => router.push("/my-estate/trust")}>
+            Set up trust provisions
+            <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       </div>

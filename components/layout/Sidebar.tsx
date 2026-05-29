@@ -61,6 +61,7 @@ const navigation: NavNode[] = [
       { name: "Cash Legacies", href: "/my-estate/legacies" },
       { name: "Residuary Estate", href: "/my-estate/residuary" },
       { name: "Digital Register", href: "/my-estate/digital" },
+      { name: "Testamentary Trust", href: "/my-estate/trust" },
       { name: "Guardian & Wishes", href: "/my-estate/wishes" },
       { name: "Will", href: "/will" },
     ],

@@ -6,6 +6,7 @@
 import { loadProfile, loadVaultRecords } from "@/lib/store";
 import { getEffectiveWillDoc } from "./model/will";
 import { loadDigitalRegister } from "./model/digitalRegister";
+import { loadTrust } from "./model/trust";
 import { WILL_CONSTANTS, type WillDocument } from "./model/willTypes";
 
 const BLANK = "________";
@@ -194,6 +195,37 @@ function buildClauses(doc: WillDocument): WillClause[] {
     }
   }
   clauses.push({ id: "residuary", heading: "Residuary Estate", optional: false, complete: resComplete, lines: resLines });
+
+  // Testamentary Trust (Schedule 3) — optional addendum, inserted after the
+  // residuary clause and before General Provisions when the user has enabled it.
+  // Condenses the Schedule 3 operative provisions; the full deed is prepared by
+  // a solicitor on death (see the executor checklist on the trust page).
+  const trust = loadTrust();
+  const trustName =
+    trust.trust_name_override?.trim() ||
+    (trust.surname?.trim() ? `${trust.surname.trim()} Family Testamentary Trust` : "[Surname] Family Testamentary Trust");
+  const trusteeText =
+    trust.initial_trustee_option === "B_primary_plus_co"
+      ? `the Primary Beneficiary of that Trust together with ${b(trust.co_trustee_name)} acting as co-trustees`
+      : "the Primary Beneficiary of that Trust, acting as sole trustee";
+  clauses.push({
+    id: "testamentary-trust",
+    heading: "Testamentary Trust",
+    optional: true,
+    complete: trust.enabled,
+    lines: trust.enabled
+      ? [
+          `(a) ESTABLISHMENT: Upon my death, such part of my residuary estate as my Trustee determines, or as my Executor and the Primary Beneficiary agree in writing within ${trust.election_window_months || 24} months of the Grant of Probate, shall be settled on the terms of the ${trustName} ("the Trust") rather than distributed outright. Establishing the Trust is at the beneficiary's election; a beneficiary may instead elect to take their share outright.`,
+          "(b) PRIMARY BENEFICIARY: Each of my children (or such other person as I nominate in writing) is the Primary Beneficiary of their own Testamentary Trust. The General Beneficiaries of each Trust are the Primary Beneficiary, their spouse or de facto partner, their children and grandchildren, and entities controlled by or for any of them.",
+          `(c) INITIAL TRUSTEE: The initial Trustee of each Testamentary Trust shall be ${trusteeText}. An adult Primary Beneficiary of full legal capacity may remove and appoint trustees (including themselves) by written instrument.`,
+          "(d) INCOME AND CAPITAL: The Trustee may, in their absolute discretion, distribute or accumulate income and pay or apply capital to or for any one or more of the General Beneficiaries. No outright capital distribution shall be made to a beneficiary under 18 years, though income or capital may be applied for their maintenance, education, and advancement.",
+          `(e) VESTING: Each Trust vests on the earlier of the date 80 years after my death (the perpetuity period under the Perpetuities Act 1984 (NSW)), the date the Trustee winds up the Trust with the Primary Beneficiary's consent, or the date the Trust fund is exhausted. On vesting, the Trustee shall distribute the Trust fund to the General Beneficiaries as they determine, or in default to the Primary Beneficiary absolutely.`,
+          "(f) ASSET PROTECTION: A purpose of each Trust is to provide asset protection. The Trustee need not make any distribution that would expose the Trust fund to a beneficiary's creditors, and may suspend distributions to a beneficiary who becomes bankrupt or enters an arrangement with creditors.",
+          `(g) TRUSTEE POWERS: The Trustee has the widest powers of investment and management, not restricted to authorised trustee investments under the ${WILL_CONSTANTS.trustee_act_reference}, including to invest, borrow for investment, carry on business, engage professionals, and resettle the Trust fund (subject to tax advice).`,
+          "(h) TAX AND ADVICE: Income distributed from this testamentary trust to a minor is taxed at ordinary individual marginal rates as “excepted trust income” under section 102AG of the Income Tax Assessment Act 1936 (Cth), not the penalty minor rates. These provisions carry significant legal and tax complexity and should be reviewed by a qualified NSW solicitor before signing.",
+        ]
+      : [],
+  });
 
   // 8 — Investment and Business Assets (optional)
   const anyInvestment =
