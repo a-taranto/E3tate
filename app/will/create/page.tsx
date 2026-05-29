@@ -18,7 +18,16 @@ import {
 } from "lucide-react";
 import type { WillTemplate } from "@/types";
 import { logActivity } from "@/lib/activityLogger";
-import { loadBeneficiaries, type Beneficiary } from "@/lib/store";
+import {
+  loadBeneficiaries,
+  loadProfile,
+  saveProfile,
+  loadWill,
+  saveWill,
+  mirrorWillToVault,
+  type Beneficiary,
+} from "@/lib/store";
+import { toast } from "@/components/ui/Toaster";
 import ComingSoon from "@/components/ui/ComingSoon";
 
 export default function CreateWillPage() {
@@ -39,6 +48,28 @@ export default function CreateWillPage() {
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
   useEffect(() => {
     setBeneficiaries(loadBeneficiaries());
+    // Open at a specific step when deep-linked from the will document (e.g. ?step=5).
+    const stepParam = parseInt(new URLSearchParams(window.location.search).get("step") || "", 10);
+    if (stepParam >= 1 && stepParam <= 6) setCurrentStep(stepParam);
+    // Resume an existing template will if one exists; otherwise prefill the
+    // identity fields from the shared profile so they aren't re-entered.
+    const existing = loadWill();
+    const profile = loadProfile();
+    setWillData((prev) => {
+      const base = existing.source === "template" && existing.template ? existing.template : {};
+      return {
+        ...prev,
+        ...base,
+        fullName: base.fullName || profile.fullName || prev.fullName || "",
+        dateOfBirth: base.dateOfBirth || profile.dateOfBirth || prev.dateOfBirth || "",
+        address: base.address || profile.address || prev.address || "",
+        maritalStatus: (base.maritalStatus ||
+          profile.maritalStatus ||
+          prev.maritalStatus ||
+          undefined) as WillTemplate["maritalStatus"],
+        spouseName: base.spouseName || profile.spouseName || prev.spouseName || "",
+      };
+    });
   }, []);
 
   const steps = [
@@ -71,24 +102,34 @@ export default function CreateWillPage() {
   };
 
   const handleGenerateWill = () => {
-    // Save to localStorage
-    localStorage.setItem("will_template", JSON.stringify({
-      ...willData,
+    const now = new Date().toISOString();
+
+    // Persist through the unified will record so the readiness score, the Will
+    // page, and the dashboard all recognise it; mirror into the vault like
+    // uploads do so it's captured in the inventory too.
+    saveWill({
       status: "generated",
-      generatedAt: new Date().toISOString(),
-    }));
+      source: "template",
+      template: { ...willData, status: "generated", generatedAt: now },
+      generatedAt: now,
+    });
+    mirrorWillToVault({ fileName: "Created from template" });
 
-    logActivity(
-      "Will Generated",
-      "will",
-      "Generated will from template",
-      {
-        field: "Will",
-        newValue: "Generated",
-      }
-    );
+    // Write the identity fields back to the shared profile so they stay in sync.
+    saveProfile({
+      fullName: willData.fullName,
+      dateOfBirth: willData.dateOfBirth,
+      address: willData.address,
+      maritalStatus: willData.maritalStatus,
+      spouseName: willData.spouseName,
+    });
 
-    alert("Will generated successfully! In production, this would create a PDF.");
+    logActivity("Will Generated", "will", "Generated will from template", {
+      field: "Will",
+      newValue: "Generated",
+    });
+
+    toast("Will generated and saved to your account");
     router.push("/will");
   };
 
@@ -171,83 +212,36 @@ export default function CreateWillPage() {
 
         {/* Step Content */}
         <Card padding="lg" className="mb-6">
-          {/* Step 1: About You */}
+          {/* Step 1: About You — read-only, sourced from your profile (no re-entry) */}
           {currentStep === 1 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-4" style={{ color: "var(--text-primary)" }}>
-                  About You
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                      Full Legal Name <span style={{ color: "var(--error)" }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="John Michael Doe"
-                      value={willData.fullName || ""}
-                      onChange={(e) => updateWillData("fullName", e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                      Date of Birth <span style={{ color: "var(--error)" }}>*</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={willData.dateOfBirth || ""}
-                      onChange={(e) => updateWillData("dateOfBirth", e.target.value)}
-                    />
-                  </div>
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
+                    About You
+                  </h3>
+                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                    Pulled from your profile — entered once, no need to re-type it here.
+                  </p>
                 </div>
-                <div className="mt-4">
-                  <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                    Primary Address <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="123 Main Street, City, State, ZIP"
-                    value={willData.address || ""}
-                    onChange={(e) => updateWillData("address", e.target.value)}
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                      Marital Status <span style={{ color: "var(--error)" }}>*</span>
-                    </label>
-                    <select
-                      className="input"
-                      value={willData.maritalStatus || ""}
-                      onChange={(e) => updateWillData("maritalStatus", e.target.value)}
-                    >
-                      <option value="">Select...</option>
-                      <option value="single">Single</option>
-                      <option value="married">Married</option>
-                      <option value="divorced">Divorced</option>
-                      <option value="widowed">Widowed</option>
-                    </select>
-                  </div>
-                  {willData.maritalStatus === "married" && (
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                        Spouse's Full Name
-                      </label>
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Jane Marie Doe"
-                        value={willData.spouseName || ""}
-                        onChange={(e) => updateWillData("spouseName", e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
+                <Button variant="ghost" size="sm" onClick={() => router.push("/profile")}>
+                  Edit in Profile
+                </Button>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
+                <Detail label="Full legal name" value={willData.fullName} />
+                <Detail label="Date of birth" value={willData.dateOfBirth} />
+                <Detail label="Address" value={willData.address} />
+                <Detail label="Marital status" value={willData.maritalStatus} />
+                {willData.maritalStatus === "married" && <Detail label="Spouse" value={willData.spouseName} />}
+              </div>
+
+              {!willData.fullName && (
+                <p className="text-sm" style={{ color: "var(--warning)" }}>
+                  Your profile is incomplete — add your details in My Estate → You first.
+                </p>
+              )}
             </div>
           )}
 
@@ -256,11 +250,24 @@ export default function CreateWillPage() {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-                  Executors
+                  Executor &amp; Trustee
                 </h3>
-                <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                  Your executor will manage your estate and ensure your wishes are carried out.
-                  Choose someone you trust who is organized and financially responsible.
+                <p className="text-sm mb-2" style={{ color: "var(--text-secondary)" }}>
+                  Your executor manages your estate and carries out your wishes. Under a NSW will the
+                  same person also acts as your <strong>Trustee</strong> (the Trustee Powers in the
+                  document are granted to them).
+                </p>
+                <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+                  People are managed on the{" "}
+                  <button
+                    type="button"
+                    onClick={() => router.push("/people")}
+                    className="underline"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    People
+                  </button>{" "}
+                  page. (A separate trustee for a testamentary trust is set up in Schedule 3.)
                 </p>
                 <div className="space-y-4">
                   <div>
@@ -531,6 +538,19 @@ export default function CreateWillPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value?: string }) {
+  return (
+    <div>
+      <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+        {label}
+      </p>
+      <p className="text-sm font-medium capitalize" style={{ color: "var(--text-primary)" }}>
+        {value || "—"}
+      </p>
     </div>
   );
 }

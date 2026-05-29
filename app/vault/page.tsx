@@ -22,6 +22,7 @@ import { documentTypes } from "@/lib/documentConfig";
 import { loadVaultRecords, deleteVaultRecord, updateVaultRecord } from "@/lib/store";
 import { toast } from "@/components/ui/Toaster";
 import ComingSoon from "@/components/ui/ComingSoon";
+import EstatePositionSummary from "@/components/dashboard/EstatePositionSummary";
 import {
   FileText,
   Wallet,
@@ -482,7 +483,7 @@ export default function VaultPage() {
                   <button
                     onClick={() => {
                       setShowAddDropdown(false);
-                      router.push('/will/builder');
+                      router.push('/will/create');
                     }}
                     className="w-full px-4 py-2.5 text-left text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors"
                   >
@@ -498,6 +499,9 @@ export default function VaultPage() {
           </div>
         }
       />
+
+      {/* Shared net-position summary — the financial overview, now in the Vault too */}
+      <EstatePositionSummary className="mb-6" />
 
       {/* Search Bar */}
       <div className="mb-6">

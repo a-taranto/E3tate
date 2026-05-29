@@ -3,6 +3,7 @@
 
 import { ServiceDefinition } from "./services";
 import { VaultRecord } from "@/types";
+import { loadAssets } from "./store";
 
 interface ServiceFormData {
   // Account details (dynamic based on service.fields)
@@ -222,9 +223,10 @@ export function getSetupSummary(): {
     }
   });
 
-  // Assets
-  const assets = JSON.parse(localStorage.getItem("setup_assets") || "[]");
-  const assetsAssigned = assets.filter((a: any) => a.beneficiaryIds.length > 0).length;
+  // Assets (now first-class via the store; the legacy `setup_assets` key is
+  // absorbed into `estate_assets` by migrateEstateAssetsV1).
+  const assets = loadAssets();
+  const assetsAssigned = assets.filter((a) => a.beneficiaryIds.length > 0).length;
 
   // Will
   let willStatus: "created" | "uploaded" | "none" = "none";

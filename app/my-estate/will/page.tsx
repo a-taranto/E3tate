@@ -197,16 +197,6 @@ export default function SetupWillPage() {
         </div>
       </Card>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between gap-4">
-        <Button variant="ghost" onClick={() => router.push("/my-estate/assets")}>
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <Button variant="ghost" onClick={() => router.push("/")}>
-          Save & Exit
-        </Button>
-      </div>
     </div>
   );
 }

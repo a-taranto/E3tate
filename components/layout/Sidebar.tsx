@@ -7,25 +7,51 @@ import { loadSettings, getCheckInStatus } from "@/lib/store";
 import {
   LayoutDashboard,
   Vault,
-  Users,
   Zap,
   User,
   History,
   Settings,
   Shield,
   HelpCircle,
-  ScrollText,
   Menu,
-  Landmark,
+  ChevronDown,
+  ChevronRight,
+  type LucideIcon,
 } from "lucide-react";
 
-const navigation = [
+type NavNode = {
+  name: string;
+  href: string;
+  icon?: LucideIcon;
+  children?: NavNode[];
+};
+
+// Top-level nav supports nested, expandable groups (My Estate, and Online &
+// Digital within it). Other pages can gain sub-menus the same way.
+const navigation: NavNode[] = [
   { name: "Overview", href: "/", icon: LayoutDashboard },
-  { name: "My Estate", href: "/my-estate/about", icon: User },
-  { name: "Will", href: "/will", icon: ScrollText },
+  {
+    name: "My Estate",
+    href: "/people",
+    icon: User,
+    children: [
+      { name: "People", href: "/people" },
+      { name: "Assets", href: "/my-estate/assets" },
+      { name: "Liabilities", href: "/my-estate/liabilities" },
+      {
+        name: "Online & Digital",
+        href: "/my-estate/online",
+        children: [
+          { name: "Accounts & subscriptions", href: "/my-estate/online#accounts" },
+          { name: "Crypto & wallets", href: "/my-estate/online#crypto" },
+          { name: "Social & email", href: "/my-estate/online#social" },
+          { name: "Domains & IP", href: "/my-estate/online#domains" },
+        ],
+      },
+      { name: "Will", href: "/will" },
+    ],
+  },
   { name: "Vault", href: "/vault", icon: Vault },
-  { name: "Liabilities", href: "/liabilities", icon: Landmark },
-  { name: "Beneficiaries", href: "/beneficiaries", icon: Users },
   { name: "Triggers", href: "/triggers", icon: Zap },
   { name: "Activity", href: "/activity", icon: History },
   { name: "Settings", href: "/settings", icon: Settings },
@@ -38,6 +64,17 @@ export default function Sidebar() {
   const [checkInLabel, setCheckInLabel] = useState("");
   const [profileName, setProfileName] = useState("");
   const [open, setOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const hrefMatches = (href: string) => {
+    const base = href.split("#")[0];
+    if (base === "/") return pathname === "/";
+    return pathname === base || pathname.startsWith(base + "/");
+  };
+  const isDescendantActive = (node: NavNode): boolean =>
+    hrefMatches(node.href) || (node.children?.some(isDescendantActive) ?? false);
+  const isGroupExpanded = (node: NavNode) =>
+    expandedGroups[node.href] ?? isDescendantActive(node);
 
   useEffect(() => {
     const refresh = () => {
@@ -70,6 +107,57 @@ export default function Sidebar() {
       .slice(0, 2)
       .join("")
       .toUpperCase() || "U";
+
+  const renderNode = (node: NavNode, depth: number) => {
+    const Icon = node.icon;
+    const hasChildren = !!node.children?.length;
+    const active = hrefMatches(node.href);
+    const expanded = hasChildren && isGroupExpanded(node);
+    return (
+      <div key={`${node.href}-${node.name}`}>
+        <div className="flex items-center">
+          <Link
+            href={node.href}
+            onClick={() => setOpen(false)}
+            className="flex-1 flex items-center gap-3 rounded-md py-2 text-sm font-medium transition-colors min-w-0"
+            style={{
+              paddingLeft: `${12 + depth * 16}px`,
+              paddingRight: "8px",
+              backgroundColor: active ? "var(--accent-dim)" : "transparent",
+              color: active ? "var(--accent)" : depth > 0 ? "var(--text-muted)" : "var(--text-inverse)",
+            }}
+            onMouseEnter={(e) => {
+              if (!active) e.currentTarget.style.backgroundColor = "var(--bg-sidebar-hover)";
+            }}
+            onMouseLeave={(e) => {
+              if (!active) e.currentTarget.style.backgroundColor = "transparent";
+            }}
+          >
+            {Icon ? (
+              <Icon className="h-5 w-5 flex-shrink-0" strokeWidth={1.5} />
+            ) : (
+              <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: "currentColor", opacity: 0.45 }} />
+            )}
+            <span className="truncate">{node.name}</span>
+          </Link>
+          {hasChildren && (
+            <button
+              type="button"
+              onClick={() => setExpandedGroups((g) => ({ ...g, [node.href]: !isGroupExpanded(node) }))}
+              className="p-1.5 mr-1 rounded-md flex-shrink-0"
+              style={{ color: "var(--text-muted)" }}
+              aria-label={`Toggle ${node.name}`}
+            >
+              {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+          )}
+        </div>
+        {hasChildren && expanded && (
+          <div className="mt-1 space-y-1">{node.children!.map((c) => renderNode(c, depth + 1))}</div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -136,41 +224,9 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          {navigation.map((item) => {
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname === item.href ||
-                  pathname.startsWith(item.href + "/") ||
-                  (item.href.startsWith("/my-estate") && pathname.startsWith("/my-estate"));
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all"
-                style={{
-                  backgroundColor: isActive ? "var(--accent-dim)" : "transparent",
-                  color: isActive ? "var(--accent)" : "var(--text-inverse)",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = "var(--bg-sidebar-hover)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                  }
-                }}
-              >
-                <item.icon className="h-5 w-5" strokeWidth={1.5} />
-                {item.name}
-              </Link>
-            );
-          })}
+        {/* Navigation — supports nested, expandable groups */}
+        <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
+          {navigation.map((node) => renderNode(node, 0))}
         </nav>
 
         {/* Proof of Life Status */}
@@ -203,7 +259,7 @@ export default function Sidebar() {
           className="border-t p-4"
           style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}
         >
-          <div className="flex items-center gap-3">
+          <Link href="/profile" className="flex items-center gap-3">
             <div
               className="flex h-10 w-10 items-center justify-center rounded-full font-semibold text-sm"
               style={{
@@ -224,10 +280,10 @@ export default function Sidebar() {
                 className="text-xs truncate"
                 style={{ color: "var(--text-muted)" }}
               >
-                {profileName ? "Estate owner" : "Setup incomplete"}
+                {profileName ? "Profile & family" : "Set up your profile"}
               </p>
             </div>
-          </div>
+          </Link>
         </div>
       </div>
       </aside>

@@ -111,7 +111,7 @@ export default function SetupOnlinePage() {
     } else if (step === "setup") {
       setStep("select");
     } else {
-      router.push("/my-estate/people");
+      router.push("/people");
     }
   };
 
