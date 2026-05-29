@@ -3,7 +3,7 @@
 // conversion of the legacy template) so a will renders even if it was created
 // after migrateWillModelV1 ran.
 
-import { loadWill, loadBeneficiaries, type Beneficiary } from "@/lib/store";
+import { loadWill, saveWill, loadBeneficiaries, type Beneficiary } from "@/lib/store";
 import type { WillTemplate } from "@/types";
 import type { WillDocument } from "./willTypes";
 
@@ -56,4 +56,15 @@ export function getEffectiveWillDoc(): WillDocument {
   if (will.doc) return will.doc;
   if (will.template) return templateToDoc(will.template, loadBeneficiaries());
   return {};
+}
+
+// Merge a patch into the stored will doc (the disposition views write here).
+// Seeds doc from the effective doc so legacy-template wills aren't clobbered.
+export function updateWillDoc(patch: Partial<WillDocument>): WillDocument {
+  const current = getEffectiveWillDoc();
+  const next = { ...current, ...patch };
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { saveWill } = require("@/lib/store") as typeof import("@/lib/store");
+  saveWill({ doc: next });
+  return next;
 }

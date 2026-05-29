@@ -1,13 +1,12 @@
-// Estate computations (Schedule 1 computed fields + Schedule 2/3 alerts).
-// Net estate correctly EXCLUDES assets that pass outside the will — joint
-// tenancies and joint accounts (survivorship) and superannuation (BDBN) unless
-// a BDBN nominates the estate — and INCLUDES digital assets of value. This
-// supersedes the simplistic store.getEstateSummary (wired into the UI in M3).
+// Estate computations. The single canonical inventory is `estate_assets`
+// (loadAssets) + `liabilities` (loadLiabilities) — the same data the asset/
+// liability UIs edit, so net worth always reflects live edits. Net estate
+// EXCLUDES assets that pass outside the will: superannuation (via BDBN) and
+// anything flagged jointly owned (passes by survivorship).
 
-import { getMinorChildren } from "@/lib/store";
-import { loadInventory } from "./inventory";
-import { loadSuperInsurance, superNominatesEstate } from "./superInsurance";
-import { loadDigitalRegister, getDigitalAssetValue } from "./digitalRegister";
+import { getMinorChildren, loadAssets, loadLiabilities } from "@/lib/store";
+import { loadSuperInsurance } from "./superInsurance";
+import { loadDigitalRegister } from "./digitalRegister";
 
 export interface EstatePosition {
   grossEstate: number;
@@ -15,29 +14,18 @@ export interface EstatePosition {
   netEstate: number;
 }
 
+// Assets that form part of the estate: everything except superannuation
+// (passes via BDBN) and jointly-owned assets (pass by survivorship).
+function estateAssets() {
+  return loadAssets().filter((a) => a.type !== "super" && !a.jointlyOwned);
+}
+
 export function getGrossEstate(): number {
-  const inv = loadInventory();
-  const property = inv.real_property
-    .filter((p) => p.title_type !== "joint_tenants") // JT passes by survivorship
-    .reduce((s, p) => s + (p.estimated_value_aud || 0), 0);
-  const bank = inv.bank_accounts
-    .filter((b) => !b.joint_account)
-    .reduce((s, b) => s + (b.approx_balance_aud || 0), 0);
-  const investments = inv.investments.reduce((s, i) => s + (i.approx_value_aud || 0), 0);
-  const business = inv.business_interests.reduce((s, b) => s + (b.approx_value_aud || 0), 0);
-  const vehicles = inv.vehicles.reduce((s, v) => s + (v.approx_value_aud || 0), 0);
-  const other = inv.other_assets.reduce((s, o) => s + (o.approx_value_aud || 0), 0);
-
-  // Super passes outside the estate unless a BDBN nominates the estate.
-  const superToEstate = loadSuperInsurance()
-    .super_funds.filter(superNominatesEstate)
-    .reduce((s, f) => s + (f.approx_balance_aud || 0), 0);
-
-  return property + bank + investments + business + vehicles + other + superToEstate + getDigitalAssetValue();
+  return estateAssets().reduce((s, a) => s + (a.estimatedValue || 0), 0);
 }
 
 export function getTotalLiabilities(): number {
-  return loadInventory().liabilities.reduce((s, l) => s + (l.outstanding_balance_aud || 0), 0);
+  return loadLiabilities().reduce((s, l) => s + (l.balance || 0), 0);
 }
 
 export function getNetEstate(): number {
@@ -59,9 +47,9 @@ export interface TrustRecommendation {
 
 export function recommendTestamentaryTrust(): TrustRecommendation {
   const net = getNetEstate();
-  const inv = loadInventory();
-  const incomeAssets =
-    inv.investments.length > 0 || inv.real_property.length > 0 || inv.business_interests.length > 0;
+  const incomeAssets = loadAssets().some((a) =>
+    ["real-property", "shares", "business"].includes(a.type)
+  );
   const minorChildren = getMinorChildren().length > 0;
 
   const reasons: string[] = [];
