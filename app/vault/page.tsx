@@ -22,7 +22,6 @@ import { documentTypes } from "@/lib/documentConfig";
 import { loadVaultRecords, deleteVaultRecord, updateVaultRecord } from "@/lib/store";
 import { toast } from "@/components/ui/Toaster";
 import ComingSoon from "@/components/ui/ComingSoon";
-import EstatePositionSummary from "@/components/dashboard/EstatePositionSummary";
 import {
   FileText,
   Wallet,
@@ -90,6 +89,14 @@ const primaryCategories = Object.entries(recordTypeConfig).filter(
   ([_, config]) => config.isPrimary
 ) as [RecordType, typeof recordTypeConfig[RecordType]][];
 
+// This page is now the Vault's "Documents" section: files you keep (deeds,
+// certificates, policies, the signed will). Financial logins, wallets, and
+// online accounts have their own homes (Assets, Accounts & Online), so the
+// catch-all type tabs are gone. Records of these legacy types are still shown,
+// de-emphasised, under "Other records" so nothing is ever orphaned.
+const DOC_TYPES: RecordType[] = ["documents", "instructions", "assets"];
+const isDocument = (t: RecordType) => DOC_TYPES.includes(t);
+
 interface VaultRecord {
   id: string;
   title: string;
@@ -121,7 +128,7 @@ export default function VaultPage() {
   const [selectedRecord, setSelectedRecord] = useState<VaultRecord | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState<RecordType | "all">("all");
+  const [view, setView] = useState<"documents" | "other">("documents");
   const [initialRecordType, setInitialRecordType] = useState<RecordType | "">("");
   const [searchQuery, setSearchQuery] = useState("");
   const [records, setRecords] = useState<VaultRecord[]>([]);
@@ -191,16 +198,15 @@ export default function VaultPage() {
 
   const allRecords: VaultRecord[] = records;
 
-  // Filter records
-  const filteredRecords = allRecords.filter((record) => {
-    const matchesType = selectedType === "all" || record.type === selectedType;
-    const matchesSearch = record.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesType && matchesSearch;
-  });
+  const documentCount = allRecords.filter((r) => isDocument(r.type)).length;
+  const otherCount = allRecords.length - documentCount;
 
-  // Get count for each type
-  const getTypeCount = (type: RecordType) =>
-    allRecords.filter((r) => r.type === type).length;
+  // Filter records by the active view (Documents vs. Other records) + search.
+  const filteredRecords = allRecords.filter((record) => {
+    const matchesView = view === "documents" ? isDocument(record.type) : !isDocument(record.type);
+    const matchesSearch = record.title.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesView && matchesSearch;
+  });
 
   // Handle view record
   const handleViewRecord = (record: VaultRecord) => {
@@ -428,26 +434,15 @@ export default function VaultPage() {
 
   // Handler for opening Add Record modal with context
   const handleOpenAddRecord = () => {
-    if (selectedType !== "all") {
-      setInitialRecordType(selectedType as RecordType);
-    } else {
-      setInitialRecordType("");
-    }
+    setInitialRecordType(view === "documents" ? "documents" : "");
     setIsAddModalOpen(true);
-  };
-
-  // Get context-specific button text
-  const getAddButtonText = () => {
-    if (selectedType === "all") return "Add";
-    const config = recordTypeConfig[selectedType as RecordType];
-    return `Add ${config?.label || "Record"}`;
   };
 
   return (
     <div className="min-h-screen bg-stone-50">
       <Header
-        title="Vault"
-        subtitle="Manage your encrypted digital estate records"
+        title="Documents"
+        subtitle="Your important files — deeds, certificates, policies, and your signed will"
         action={
           <div className="relative">
             <Button
@@ -456,7 +451,7 @@ export default function VaultPage() {
               className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
-              {getAddButtonText()}
+              Add
               <ChevronDown className="h-4 w-4" />
             </Button>
 
@@ -476,8 +471,8 @@ export default function VaultPage() {
                   >
                     <Plus className="h-4 w-4 text-stone-400" />
                     <div>
-                      <div className="font-medium">Add Record</div>
-                      <div className="text-xs text-stone-500">Upload document or add credential</div>
+                      <div className="font-medium">Upload Document</div>
+                      <div className="text-xs text-stone-500">Add a deed, certificate, policy, or file</div>
                     </div>
                   </button>
                   <button
@@ -500,9 +495,6 @@ export default function VaultPage() {
         }
       />
 
-      {/* Shared net-position summary — the financial overview, now in the Vault too */}
-      <EstatePositionSummary className="mb-6" />
-
       {/* Search Bar */}
       <div className="mb-6">
         <div className="relative">
@@ -519,29 +511,51 @@ export default function VaultPage() {
         </div>
       </div>
 
-      {/* Record Type Tabs - Only show 4 primary categories */}
+      {/* View switcher: Documents (default) and, only if any exist, the legacy
+          financial/wallet/account records under "Other records". */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
         <Button
-          variant={selectedType === "all" ? "primary" : "secondary"}
+          variant={view === "documents" ? "primary" : "secondary"}
           size="sm"
-          onClick={() => setSelectedType("all")}
-          className={selectedType !== "all" ? "bg-white border-stone-200 text-stone-600 hover:bg-stone-50" : ""}
+          onClick={() => setView("documents")}
+          className={view !== "documents" ? "bg-white border-stone-200 text-stone-600 hover:bg-stone-50" : ""}
         >
-          All ({allRecords.length})
+          <FileText className="h-4 w-4" />
+          Documents ({documentCount})
         </Button>
-        {primaryCategories.map(([key, config]) => (
+        {otherCount > 0 && (
           <Button
-            key={key}
-            variant={selectedType === key ? "primary" : "secondary"}
+            variant={view === "other" ? "primary" : "secondary"}
             size="sm"
-            onClick={() => setSelectedType(key as RecordType)}
-            className={selectedType !== key ? "bg-white border-stone-200 text-stone-600 hover:bg-stone-50" : ""}
+            onClick={() => setView("other")}
+            className={view !== "other" ? "bg-white border-stone-200 text-stone-600 hover:bg-stone-50" : ""}
           >
-            <config.icon className="h-4 w-4" />
-            {config.label} ({getTypeCount(key as RecordType)})
+            <Key className="h-4 w-4" />
+            Other records ({otherCount})
           </Button>
-        ))}
+        )}
       </div>
+
+      {/* When viewing the legacy non-document records, explain where they're headed. */}
+      {view === "other" && (
+        <Card padding="md" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--info)" }}>
+          <div className="flex items-start gap-3">
+            <Shield className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: "var(--info)" }} />
+            <div className="flex-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+              <p className="font-medium mb-1" style={{ color: "var(--text-primary)" }}>
+                Financial logins, wallets &amp; online accounts have moved
+              </p>
+              <p>
+                These now live with the thing they belong to — under{" "}
+                <button className="underline" style={{ color: "var(--accent)" }} onClick={() => router.push("/vault/assets")}>Assets</button>{" "}
+                and{" "}
+                <button className="underline" style={{ color: "var(--accent)" }} onClick={() => router.push("/vault/online")}>Accounts &amp; Online</button>.
+                The records below are kept here until you move them.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Records Grid */}
       {!loaded ? (
@@ -565,23 +579,26 @@ export default function VaultPage() {
           </div>
           <h3 className="text-stone-900 font-medium">
             {searchQuery
-              ? "No records found"
-              : selectedType === "all"
-                ? "No records yet"
-                : `No ${recordTypeConfig[selectedType as RecordType].label} yet`}
+              ? "No documents found"
+              : view === "documents"
+                ? "No documents yet"
+                : "No other records"}
           </h3>
           <p className="text-stone-500 text-sm mt-1">
             {searchQuery
               ? `No records match "${searchQuery}". Try a different search term.`
-              : "Add a record to securely store important information."}
+              : "Upload deeds, certificates, policies, or your signed will to keep them safe."}
           </p>
-          {!searchQuery && (
+          {!searchQuery && view === "documents" && (
             <Button
               variant="primary"
               className="mt-4"
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={() => {
+                setInitialRecordType("documents");
+                setIsAddModalOpen(true);
+              }}
             >
-              Add Your First Record
+              Upload Your First Document
             </Button>
           )}
         </div>

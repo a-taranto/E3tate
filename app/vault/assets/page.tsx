@@ -39,7 +39,6 @@ import {
   type VaultRecord,
   type VaultType,
 } from "@/lib/store";
-import EstatePositionSummary from "@/components/dashboard/EstatePositionSummary";
 
 // The full first-class asset catalog (Phase A2). Each tile doubles as a
 // quick-add affordance and as the type picker inside the form.
@@ -271,9 +270,6 @@ export default function SetupAssetsPage() {
           Record what you own and what it&apos;s worth. This drives your net estate and, later, who inherits each item.
         </p>
       </div>
-
-      {/* Shared net-position summary */}
-      <EstatePositionSummary className="mb-6" />
 
       {/* Count + Add */}
       <div className="flex items-center justify-between gap-4 mb-6">

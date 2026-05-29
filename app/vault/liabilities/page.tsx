@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
 import { Landmark, Plus, Trash2, ArrowRight, ArrowLeft } from "lucide-react";
-import EstatePositionSummary from "@/components/dashboard/EstatePositionSummary";
 import {
   loadLiabilities,
   addLiability,
@@ -75,9 +74,6 @@ export default function SetupLiabilitiesPage() {
           Record debts your executor must settle before distributing the estate. These reduce your net estate.
         </p>
       </div>
-
-      {/* Net position updates live as you add debts */}
-      <EstatePositionSummary className="mb-6" />
 
       {/* Count + Add */}
       <div className="flex items-center justify-between gap-4 mb-6">

@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
-import { Globe, FileText, ArrowRight } from "lucide-react";
+import { Globe, FileText, ArrowRight, Download } from "lucide-react";
 import { loadVaultRecords, type VaultRecord } from "@/lib/store";
 import { loadDigitalRegister, getDigitalAssetValue, type DigitalRegister } from "@/lib/model/digitalRegister";
+import { downloadDigitalRegisterPdf } from "@/lib/annexures";
 
 const fmtAUD = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
 
@@ -39,11 +40,17 @@ export default function DigitalRegisterPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Digital Asset Register</h2>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          A summary of your digital accounts and assets. This register is appended to your will as a <strong>schedule</strong> so your executor can find and deal with them.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Digital Asset Register</h2>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            A summary of your digital accounts and assets. Download it as an <strong>annexure</strong> to keep with your printed will so your executor can find and deal with them.
+          </p>
+        </div>
+        <Button variant="primary" size="sm" onClick={downloadDigitalRegisterPdf} className="flex-shrink-0">
+          <Download className="h-4 w-4" />
+          Download PDF
+        </Button>
       </div>
 
       <Card padding="lg" className="mb-6">

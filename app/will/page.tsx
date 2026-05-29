@@ -17,6 +17,8 @@ import {
   Sparkles,
   Clock,
   Plus,
+  Globe,
+  Paperclip,
 } from "lucide-react";
 import { logActivity } from "@/lib/activityLogger";
 import {
@@ -29,6 +31,7 @@ import {
 } from "@/lib/store";
 import { getWillRender, includedClauses, type WillRender } from "@/lib/willRenderer";
 import { downloadWillPdf } from "@/lib/willPdf";
+import { downloadAssetInventoryPdf, downloadDigitalRegisterPdf } from "@/lib/annexures";
 
 // Each will clause links to where its content is provided/edited — the relevant
 // My Estate disposition view, People, or the Vault inventory.
@@ -280,6 +283,47 @@ export default function WillPage() {
               )}
             </div>
           </div>
+
+          {/* Annexures — printable companion schedules generated from the Vault,
+              to attach to the signed paper Will (the document references them). */}
+          <Card padding="lg" className="mb-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Paperclip className="h-5 w-5 flex-shrink-0" style={{ color: "var(--accent)" }} />
+              <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                Annexures to attach to your printed Will
+              </h3>
+            </div>
+            <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
+              Generated from your Vault. Print these and keep them with the signed Will — it refers
+              to them. They contain no passwords or secrets.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center justify-between gap-3 rounded-lg p-3" style={{ backgroundColor: "var(--bg-surface)" }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+                  <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
+                    Asset &amp; Liability Inventory
+                  </span>
+                </div>
+                <Button variant="secondary" size="sm" onClick={downloadAssetInventoryPdf}>
+                  <Download className="h-4 w-4" />
+                  PDF
+                </Button>
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-lg p-3" style={{ backgroundColor: "var(--bg-surface)" }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Globe className="h-4 w-4 flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+                  <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
+                    Digital Assets Register
+                  </span>
+                </div>
+                <Button variant="secondary" size="sm" onClick={downloadDigitalRegisterPdf}>
+                  <Download className="h-4 w-4" />
+                  PDF
+                </Button>
+              </div>
+            </div>
+          </Card>
 
           <WillDocumentBody render={render} />
         </div>
