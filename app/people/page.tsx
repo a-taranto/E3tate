@@ -61,6 +61,22 @@ const roleConfig: Record<Beneficiary["role"], { variant: "success" | "info" | "d
   guardian: { variant: "warning", description: "Cares for any minor children" },
 };
 
+// Structured relationships so the People list can group family reliably.
+const RELATIONSHIP_OPTIONS = ["Spouse", "Child", "Parent", "Sibling", "Friend", "Other"];
+
+const isSpouse = (rel?: string) => /spouse|husband|wife|partner|de ?facto/i.test(rel || "");
+// Family = spouse or child; everyone else is grouped by role.
+const isFamilyMember = (p: Beneficiary) => isSpouse(p.relationship) || isChildRelationship(p.relationship || "");
+
+// People list sections, in display order. A person appears in the first section
+// they match — so a spouse who is also a beneficiary shows once, under Family.
+const PEOPLE_SECTIONS: { key: string; title: string; match: (p: Beneficiary) => boolean }[] = [
+  { key: "family", title: "Spouse & Children", match: (p) => isFamilyMember(p) },
+  { key: "executors", title: "Executors & Trustees", match: (p) => !isFamilyMember(p) && (p.role === "executor" || p.role === "trustee") },
+  { key: "beneficiaries", title: "Beneficiaries", match: (p) => !isFamilyMember(p) && p.role === "beneficiary" },
+  { key: "others", title: "Guardians, Observers & Contacts", match: (p) => !isFamilyMember(p) && (p.role === "guardian" || p.role === "observer" || p.role === "contact") },
+];
+
 export default function PeoplePage() {
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
   const [vaultRecords, setVaultRecords] = useState<VaultRecord[]>([]);
@@ -246,10 +262,20 @@ export default function PeoplePage() {
             </Button>
           </Card>
         ) : (
-          beneficiaries.map((person) => {
-            const access = getPersonAccess(person);
-            return (
-              <Card key={person.id} hover padding="none">
+          <div className="space-y-8">
+            {PEOPLE_SECTIONS.map((sec) => {
+              const sectionPeople = beneficiaries.filter(sec.match);
+              if (sectionPeople.length === 0) return null;
+              return (
+                <div key={sec.key}>
+                  <h2 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--text-muted)" }}>
+                    {sec.title} ({sectionPeople.length})
+                  </h2>
+                  <div className="space-y-3">
+                    {sectionPeople.map((person) => {
+                      const access = getPersonAccess(person);
+                      return (
+                        <Card key={person.id} hover padding="none">
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-4">
@@ -353,8 +379,13 @@ export default function PeoplePage() {
                   </div>
                 </div>
               </Card>
-            );
-          })
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -382,7 +413,16 @@ export default function PeoplePage() {
                 <option value="contact">Contact</option>
               </select>
             </div>
-            <Input label="Relationship to me" placeholder="Spouse, Child, Friend…" value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} />
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Relationship to me</label>
+              <select className="input" value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
+                <option value="">Select…</option>
+                {RELATIONSHIP_OPTIONS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Spouse &amp; children appear at the top of your People list.</p>
+            </div>
             <div className="md:col-span-2">
               <Input label="Residential Address" placeholder="42 Park Ave, Sydney NSW 2000" value={form.residentialAddress} onChange={(e) => setForm({ ...form, residentialAddress: e.target.value })} />
             </div>
