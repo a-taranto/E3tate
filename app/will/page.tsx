@@ -68,24 +68,6 @@ export default function WillPage() {
     return () => window.removeEventListener("store-updated", refresh);
   }, []);
 
-  const scrollToClause = (id: string) => {
-    const el = document.getElementById(`clause-${id}`);
-    if (!el) return;
-    // Find the nearest ancestor that actually scrolls (a non-scrolling
-    // overflow:auto wrapper would otherwise trap scrollIntoView).
-    let p: HTMLElement | null = el.parentElement;
-    while (p) {
-      const oy = getComputedStyle(p).overflowY;
-      if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) {
-        const top = el.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop - 16;
-        p.scrollTo({ top, behavior: "smooth" });
-        return;
-      }
-      p = p.parentElement;
-    }
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   const beneficiaryName = (id?: string) =>
     beneficiaries.find((b) => b.id === id)?.name || "—";
 
@@ -148,7 +130,21 @@ export default function WillPage() {
   // -------------------------------------------------------------------------
   // Choose-a-will view (status "none", or user is replacing an existing will)
   // -------------------------------------------------------------------------
-  const showOptions = will.status === "none" || replacing;
+  const isGenerated = will.status === "generated";
+  const isUploaded = will.status === "uploaded";
+  // Has the user provided substantive content (beyond always-on boilerplate)?
+  // "Started a will" = a deliberate disposition choice exists. Excludes
+  // always-on boilerplate and the auto-derived digital-assets clause (which is
+  // complete whenever the Vault has any accounts).
+  const hasContent = render
+    ? render.clauses.some(
+        (c) =>
+          !["revocation", "trustee-powers", "general-provisions", "digital-assets"].includes(c.id) &&
+          c.complete
+      )
+    : false;
+  // Show the upload/create choice only when there's nothing to preview yet.
+  const showOptions = replacing || (!isGenerated && !isUploaded && !hasContent);
 
   if (showOptions) {
     return (
@@ -230,201 +226,62 @@ export default function WillPage() {
   }
 
   // -------------------------------------------------------------------------
-  // Draft in progress
+  // Document view — a generated will, or a live DRAFT preview built from your
+  // estate details (My Estate disposition + Vault inventory).
   // -------------------------------------------------------------------------
-  if (will.status === "draft") {
-    const resumeHref = "/will/create";
+  if (render && !isUploaded) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <Header title="Will" subtitle="You have a will in progress" />
-        <div className="container mx-auto px-8 py-8 max-w-4xl">
-          <Card padding="lg" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--warning)" }}>
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl" style={{ backgroundColor: "var(--warning-bg)" }}>
-                <Clock className="h-6 w-6" style={{ color: "var(--warning)" }} />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-                  Will Draft In Progress
-                </h3>
-                <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                  Pick up where you left off. Your draft isn&apos;t counted as a completed will until you finish it.
-                </p>
-                <div className="flex gap-3">
-                  <Button variant="primary" onClick={() => router.push(resumeHref)}>
-                    <Edit className="h-4 w-4" />
-                    Resume Draft
-                  </Button>
-                  <Button variant="ghost" onClick={() => setReplacing(true)}>
-                    Start Over
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Generated from template
-  // -------------------------------------------------------------------------
-  if (will.status === "generated" && render) {
-    const included = includedClauses(render);
-    const numberOf = (id: string) => included.findIndex((c) => c.id === id) + 1;
-    return (
-      <div className="flex-1 overflow-y-auto">
-        <Header title="Will" subtitle="Your last will and testament" />
+        <Header
+          title="Will"
+          subtitle={isGenerated ? "Your last will and testament" : "Draft preview — built from your estate details"}
+        />
         <div className="container mx-auto px-8 py-8 max-w-5xl">
           {/* Action bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-            <div className="flex items-center gap-2 text-sm" style={{ color: "var(--success)" }}>
-              <CheckCircle className="h-5 w-5 flex-shrink-0" />
-              <span>Will saved — print &amp; sign with two witnesses to make it valid.</span>
-            </div>
+            {isGenerated ? (
+              <div className="flex items-center gap-2 text-sm" style={{ color: "var(--success)" }}>
+                <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                <span>Will saved — print &amp; sign with two witnesses to make it valid.</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm" style={{ color: "var(--warning)" }}>
+                <Clock className="h-5 w-5 flex-shrink-0" />
+                <span>Draft — not yet generated. Keep editing in My Estate, then review &amp; generate to finalise.</span>
+              </div>
+            )}
             <div className="flex gap-2">
-              <Button variant="primary" size="sm" onClick={downloadWillPdf}>
-                <Download className="h-4 w-4" />
-                Download PDF
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => router.push("/will/create")}>
-                <Edit className="h-4 w-4" />
-                Edit
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setReplacing(true)}>
-                <Upload className="h-4 w-4" />
-                Replace
-              </Button>
+              {isGenerated ? (
+                <>
+                  <Button variant="primary" size="sm" onClick={downloadWillPdf}>
+                    <Download className="h-4 w-4" />
+                    Download PDF
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => router.push("/will/create")}>
+                    <Edit className="h-4 w-4" />
+                    Edit
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setReplacing(true)}>
+                    <Upload className="h-4 w-4" />
+                    Replace
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="primary" size="sm" onClick={() => router.push("/will/create")}>
+                    <CheckCircle className="h-4 w-4" />
+                    Review &amp; Generate
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setReplacing(true)}>
+                    <Upload className="h-4 w-4" />
+                    Upload instead
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex gap-8 items-start">
-            {/* The document */}
-            <Card padding="lg" className="flex-1 min-w-0">
-              <div className="text-center mb-8 pb-6 border-b" style={{ borderColor: "var(--border)" }}>
-                <h2 className="text-2xl font-bold tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  LAST WILL AND TESTAMENT
-                </h2>
-                <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
-                  of {render.testator.name}, of {render.testator.address}
-                </p>
-                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                  Born {render.testator.dob} · {render.testator.occupation}
-                </p>
-              </div>
-
-              <div className="space-y-8">
-                {render.clauses.map((c) => {
-                  const inDoc = !c.optional || c.complete;
-                  return (
-                    <section key={c.id} id={`clause-${c.id}`} className="scroll-mt-6">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h3 className="font-semibold" style={{ color: inDoc ? "var(--text-primary)" : "var(--text-muted)" }}>
-                            {inDoc ? `${numberOf(c.id)}. ` : ""}
-                            {c.heading}
-                          </h3>
-                          {c.optional && !c.complete && (
-                            <span
-                              className="text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
-                              style={{ backgroundColor: "var(--bg-surface)", color: "var(--text-muted)" }}
-                            >
-                              Optional — not added
-                            </span>
-                          )}
-                        </div>
-                        {CLAUSE_EDIT[c.id] && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="flex-shrink-0"
-                            onClick={() => router.push(CLAUSE_EDIT[c.id])}
-                          >
-                            {c.complete ? (
-                              <>
-                                <Edit className="h-4 w-4" />
-                                Edit
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="h-4 w-4" />
-                                Add
-                              </>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                      {c.lines.length > 0 ? (
-                        <div className="space-y-2 text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                          {c.lines.map((line, i) =>
-                            line === "" ? <div key={i} className="h-1" /> : <p key={i}>{line}</p>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-sm italic" style={{ color: "var(--text-muted)" }}>
-                          Nothing added yet — this clause will be omitted from your will.
-                        </p>
-                      )}
-                    </section>
-                  );
-                })}
-
-                <section id="clause-execution" className="scroll-mt-6 pt-6 border-t" style={{ borderColor: "var(--border)" }}>
-                  <h3 className="font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-                    Execution
-                  </h3>
-                  <div className="space-y-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                    <p>Signed by the testator in the presence of two witnesses present at the same time.</p>
-                    <p>
-                      Testator: {render.testator.name} · Date: {render.execution.date} · Place: {render.execution.city}
-                    </p>
-                    <p>
-                      Witness 1: {render.execution.witness1} · Witness 2: {render.execution.witness2}
-                    </p>
-                  </div>
-                </section>
-              </div>
-            </Card>
-
-            {/* Section navigator */}
-            <nav className="w-56 flex-shrink-0 sticky top-4 hidden lg:block">
-              <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--text-muted)" }}>
-                Sections
-              </p>
-              <ul className="space-y-1">
-                {render.clauses.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      onClick={() => scrollToClause(c.id)}
-                      className="w-full flex items-center gap-2 text-left text-sm rounded-md px-2 py-1.5 transition-colors hover:bg-accent-muted/40"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      {c.complete ? (
-                        <CheckCircle className="h-4 w-4 flex-shrink-0" style={{ color: "var(--success)" }} />
-                      ) : (
-                        <span
-                          className="h-3.5 w-3.5 rounded-full border flex-shrink-0"
-                          style={{ borderColor: c.optional ? "var(--text-muted)" : "var(--warning)" }}
-                        />
-                      )}
-                      <span className="truncate">{c.heading}</span>
-                    </button>
-                  </li>
-                ))}
-                <li>
-                  <button
-                    onClick={() => scrollToClause("execution")}
-                    className="w-full flex items-center gap-2 text-left text-sm rounded-md px-2 py-1.5 transition-colors hover:bg-accent-muted/40"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    <span className="h-3.5 w-3.5 rounded-full border flex-shrink-0" style={{ borderColor: "var(--text-muted)" }} />
-                    <span className="truncate">Execution</span>
-                  </button>
-                </li>
-              </ul>
-            </nav>
-          </div>
+          <WillDocumentBody render={render} />
         </div>
       </div>
     );
@@ -578,15 +435,136 @@ export default function WillPage() {
   );
 }
 
-function Detail({ label, value }: { label: string; value?: string }) {
+// The will document + section navigator. Shared by the generated view and the
+// live draft preview.
+function WillDocumentBody({ render }: { render: WillRender }) {
+  const router = useRouter();
+  const included = includedClauses(render);
+  const numberOf = (id: string) => included.findIndex((c) => c.id === id) + 1;
+
+  const scrollToClause = (id: string) => {
+    const el = document.getElementById(`clause-${id}`);
+    if (!el) return;
+    let p: HTMLElement | null = el.parentElement;
+    while (p) {
+      const oy = getComputedStyle(p).overflowY;
+      if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) {
+        p.scrollTo({ top: el.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop - 16, behavior: "smooth" });
+        return;
+      }
+      p = p.parentElement;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div>
-      <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </p>
-      <p className="text-sm font-medium capitalize" style={{ color: "var(--text-primary)" }}>
-        {value || "—"}
-      </p>
+    <div className="flex gap-8 items-start">
+      {/* The document */}
+      <Card padding="lg" className="flex-1 min-w-0">
+        <div className="text-center mb-8 pb-6 border-b" style={{ borderColor: "var(--border)" }}>
+          <h2 className="text-2xl font-bold tracking-wide" style={{ color: "var(--text-primary)" }}>
+            LAST WILL AND TESTAMENT
+          </h2>
+          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+            of {render.testator.name}, of {render.testator.address}
+          </p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            Born {render.testator.dob} · {render.testator.occupation}
+          </p>
+        </div>
+
+        <div className="space-y-8">
+          {render.clauses.map((c) => {
+            const inDoc = !c.optional || c.complete;
+            return (
+              <section key={c.id} id={`clause-${c.id}`} className="scroll-mt-6">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="font-semibold" style={{ color: inDoc ? "var(--text-primary)" : "var(--text-muted)" }}>
+                      {inDoc ? `${numberOf(c.id)}. ` : ""}
+                      {c.heading}
+                    </h3>
+                    {c.optional && !c.complete && (
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
+                        style={{ backgroundColor: "var(--bg-surface)", color: "var(--text-muted)" }}
+                      >
+                        Optional — not added
+                      </span>
+                    )}
+                  </div>
+                  {CLAUSE_EDIT[c.id] && (
+                    <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(CLAUSE_EDIT[c.id])}>
+                      {c.complete ? (
+                        <>
+                          <Edit className="h-4 w-4" />
+                          Edit
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4" />
+                          Add
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {c.lines.length > 0 ? (
+                  <div className="space-y-2 text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                    {c.lines.map((line, i) => (line === "" ? <div key={i} className="h-1" /> : <p key={i}>{line}</p>))}
+                  </div>
+                ) : (
+                  <p className="text-sm italic" style={{ color: "var(--text-muted)" }}>
+                    Nothing added yet — this clause will be omitted from your will.
+                  </p>
+                )}
+              </section>
+            );
+          })}
+
+          <section id="clause-execution" className="scroll-mt-6 pt-6 border-t" style={{ borderColor: "var(--border)" }}>
+            <h3 className="font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Execution</h3>
+            <div className="space-y-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+              <p>Signed by the testator in the presence of two witnesses present at the same time.</p>
+              <p>Testator: {render.testator.name} · Date: {render.execution.date} · Place: {render.execution.city}</p>
+              <p>Witness 1: {render.execution.witness1} · Witness 2: {render.execution.witness2}</p>
+            </div>
+          </section>
+        </div>
+      </Card>
+
+      {/* Section navigator */}
+      <nav className="w-56 flex-shrink-0 sticky top-4 hidden lg:block">
+        <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--text-muted)" }}>Sections</p>
+        <ul className="space-y-1">
+          {render.clauses.map((c) => (
+            <li key={c.id}>
+              <button
+                onClick={() => scrollToClause(c.id)}
+                className="w-full flex items-center gap-2 text-left text-sm rounded-md px-2 py-1.5 transition-colors hover:bg-accent-muted/40"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                {c.complete ? (
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" style={{ color: "var(--success)" }} />
+                ) : (
+                  <span className="h-3.5 w-3.5 rounded-full border flex-shrink-0" style={{ borderColor: c.optional ? "var(--text-muted)" : "var(--warning)" }} />
+                )}
+                <span className="truncate">{c.heading}</span>
+              </button>
+            </li>
+          ))}
+          <li>
+            <button
+              onClick={() => scrollToClause("execution")}
+              className="w-full flex items-center gap-2 text-left text-sm rounded-md px-2 py-1.5 transition-colors hover:bg-accent-muted/40"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              <span className="h-3.5 w-3.5 rounded-full border flex-shrink-0" style={{ borderColor: "var(--text-muted)" }} />
+              <span className="truncate">Execution</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
     </div>
   );
 }
