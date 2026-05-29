@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import { Card, Button, Input } from "@/components/ui";
 import { Landmark, Plus, Trash2, Check } from "lucide-react";
+import EstatePositionSummary from "@/components/dashboard/EstatePositionSummary";
 import {
   loadLiabilities,
   saveLiabilities,
@@ -86,6 +87,9 @@ export default function LiabilitiesPage() {
           </Button>
         }
       />
+
+      {/* Shared net-position summary */}
+      <EstatePositionSummary className="mb-6" />
 
       {/* Summary */}
       <Card className="mb-6 border-l-4" style={{ borderLeftColor: "var(--warning)" }}>

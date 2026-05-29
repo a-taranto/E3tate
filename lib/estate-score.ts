@@ -1,7 +1,7 @@
 // Estate Readiness Score calculation
 // Based on simplified architecture spec
 
-import { loadBeneficiaries, loadVaultRecords } from "@/lib/store";
+import { loadBeneficiaries, loadVaultRecords, hasWill, getMinorChildren, loadWill } from "@/lib/store";
 
 export interface EstateData {
   hasWill: boolean;
@@ -11,6 +11,8 @@ export interface EstateData {
   itemsWithBeneficiaries: number;
   totalItems: number;
   hasProofOfLife: boolean;
+  hasMinorChildren: boolean; // conditional: drives the Guardian requirement
+  hasGuardian: boolean;
 }
 
 export interface ScoreResult {
@@ -76,8 +78,19 @@ export function calculateEstateScore(data: EstateData): ScoreResult {
     },
   ];
 
+  // Conditional requirement: minor children ⇒ a Guardian is required (Part B
+  // Clause 4). Added dynamically so it lowers the score until satisfied.
+  if (data.hasMinorChildren) {
+    breakdown.push({
+      label: "Guardian appointed",
+      points: data.hasGuardian ? 15 : 0,
+      maxPoints: 15,
+      completed: data.hasGuardian,
+    });
+  }
+
   const totalScore = breakdown.reduce((sum, item) => sum + item.points, 0);
-  const maxScore = 100;
+  const maxScore = breakdown.reduce((sum, item) => sum + item.maxPoints, 0);
   const percentage = Math.round((totalScore / maxScore) * 100);
 
   const guidance = getScoreGuidance(data, percentage);
@@ -102,6 +115,10 @@ function getScoreGuidance(data: EstateData, percentage: number): string {
 
   if (!data.hasExecutor) {
     return "Add an executor to manage your estate";
+  }
+
+  if (data.hasMinorChildren && !data.hasGuardian) {
+    return "You have minor children — appoint a Guardian on the People page";
   }
 
   if (data.beneficiaryCount === 0) {
@@ -144,17 +161,25 @@ export function getEstateDataFromLocalStorage(): EstateData {
       itemsWithBeneficiaries: 0,
       totalItems: 0,
       hasProofOfLife: false,
+      hasMinorChildren: false,
+      hasGuardian: false,
     };
   }
 
-  // Check for will (still keyed separately until the will flow joins the store)
-  const willData = localStorage.getItem("uploaded_will");
-  const hasWill = !!willData;
+  // Will status from the unified store — a generated template will counts the
+  // same as an uploaded one (both flip getWillStatus to a completed state).
+  const willPresent = hasWill();
 
   // Beneficiaries from the unified store (same source the dashboard/beneficiaries read)
   const beneficiaries = loadBeneficiaries();
   const hasExecutor = beneficiaries.some((b) => b.role === "executor");
   const beneficiaryCount = beneficiaries.length;
+
+  // Conditional: minor children require a Guardian (a person with the guardian
+  // role, or one named in the will).
+  const hasMinorChildren = getMinorChildren().length > 0;
+  const hasGuardian =
+    beneficiaries.some((b) => b.role === "guardian") || !!loadWill().doc?.guardians?.primary?.full_name;
 
   // Vault items from the unified store
   const vaultRecords = loadVaultRecords();
@@ -171,12 +196,14 @@ export function getEstateDataFromLocalStorage(): EstateData {
   const hasProofOfLife = false;
 
   return {
-    hasWill,
+    hasWill: willPresent,
     hasExecutor,
     beneficiaryCount,
     vaultItemCount,
     itemsWithBeneficiaries,
     totalItems,
     hasProofOfLife,
+    hasMinorChildren,
+    hasGuardian,
   };
 }

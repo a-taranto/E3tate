@@ -13,12 +13,13 @@ import {
 // Where each incomplete checklist item sends the user to fix it.
 const ROUTE_BY_LABEL: Record<string, string> = {
   "Will uploaded": "/will",
-  "Executor assigned": "/beneficiaries",
-  "Beneficiaries added": "/beneficiaries",
+  "Executor assigned": "/people",
+  "Beneficiaries added": "/people",
   "Vault items added": "/vault",
   "Important documents stored": "/vault",
   "Items have beneficiaries": "/vault",
   "Proof of life configured": "/settings",
+  "Guardian appointed": "/people",
 };
 
 export default function EstateReadinessScore() {

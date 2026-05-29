@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import EstateReadinessScore from "@/components/dashboard/EstateReadinessScore";
+import EstatePositionSummary from "@/components/dashboard/EstatePositionSummary";
+import TrustRecommendationCard from "@/components/dashboard/TrustRecommendation";
 import { Card, Button, StatusIndicator, Badge } from "@/components/ui";
-import { getVaultStats, getBeneficiaryStats, loadSettings, type ExecutionStatus } from "@/lib/store";
+import { getVaultStats, getBeneficiaryStats, loadSettings, loadWill, type ExecutionStatus } from "@/lib/store";
 import {
   FileText,
   Users,
@@ -21,11 +23,7 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
-  // Mock data
-  const willStatus = {
-    exists: false, // Set to true to show "will exists" state
-    lastUpdated: "3 days ago",
-  };
+  const [willStatus, setWillStatus] = useState({ exists: false, lastUpdated: "" });
 
   const vaultStats = {
     lastUpdated: "2 hours ago",
@@ -47,6 +45,11 @@ export default function DashboardPage() {
       setVault(getVaultStats());
       setPeople(getBeneficiaryStats());
       setExecutionStatus(loadSettings().executionStatus);
+      const w = loadWill();
+      setWillStatus({
+        exists: w.status === "generated" || w.status === "uploaded",
+        lastUpdated: w.updatedAt ? new Date(w.updatedAt).toLocaleDateString() : "",
+      });
     };
     refresh();
     window.addEventListener("store-updated", refresh);
@@ -71,7 +74,7 @@ export default function DashboardPage() {
   const quickActions = [
     { label: "Add Record", icon: Plus, href: "/vault" },
     { label: "View Vault", icon: Eye, href: "/vault" },
-    { label: "Manage Beneficiaries", icon: Users, href: "/beneficiaries" },
+    { label: "Manage People", icon: Users, href: "/people" },
   ];
 
   const recentActivity = [
@@ -126,7 +129,7 @@ export default function DashboardPage() {
               Follow our guided wizard to set up your digital estate step by step
             </p>
           </div>
-          <Button variant="primary" onClick={() => router.push("/my-estate/about")}>
+          <Button variant="primary" onClick={() => router.push("/people")}>
             <ArrowRight className="h-4 w-4" />
             Start Setup
           </Button>
@@ -196,6 +199,12 @@ export default function DashboardPage() {
         </div>
       </Card>
 
+      {/* Estate Value — shared net-position summary (A3) */}
+      <EstatePositionSummary className="mb-6" />
+
+      {/* Testamentary-trust recommendation (Schedule 3) — only when warranted */}
+      <TrustRecommendationCard className="mb-6" />
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <Card hover className="cursor-pointer" onClick={() => router.push("/vault")}>
@@ -211,7 +220,7 @@ export default function DashboardPage() {
           </p>
         </Card>
 
-        <Card hover className="cursor-pointer" onClick={() => router.push("/beneficiaries")}>
+        <Card hover className="cursor-pointer" onClick={() => router.push("/people")}>
           <div className="flex items-start justify-between">
             <div>
               <p className="text-text-muted text-sm mb-2">Beneficiaries</p>
@@ -274,7 +283,7 @@ export default function DashboardPage() {
             {recentActivity.map((activity) => {
               const getActivityRoute = () => {
                 if (activity.type === "trigger") return "/triggers";
-                if (activity.type === "add") return "/beneficiaries";
+                if (activity.type === "add") return "/people";
                 return "/vault";
               };
 

@@ -9,6 +9,9 @@
 // here; collapsing 6→4 is a separate concern (AUDIT.md Phase 2). This module
 // only normalizes *case/shape* so every screen reads the same array.
 
+import type { WillTemplate } from "@/types";
+import type { WillDocument } from "@/lib/model/willTypes";
+
 // ---------------------------------------------------------------------------
 // Canonical types
 // ---------------------------------------------------------------------------
@@ -66,7 +69,8 @@ export interface Beneficiary {
   email: string;
   role: BeneficiaryRole;
   status: BeneficiaryStatus;
-  relationship?: string;
+  relationship?: string; // "Relationship to me" — used in the will document
+  residentialAddress?: string; // used in the will for executors/guardians
   invitedDate?: string;
   recordsAccess?: number;
   scopeSummary?: string;
@@ -116,7 +120,9 @@ export function toPrimaryType(type: string): VaultType {
   return LEGACY_TO_PRIMARY[t] || (VALID_TYPES.includes(t as VaultType) ? (t as VaultType) : "documents");
 }
 
-const dispatchUpdate = () => {
+// Exported so the lib/model/* schedule slices reuse the same write-notify
+// channel. (store.ts never imports lib/model/*, so there is no import cycle.)
+export const dispatchUpdate = () => {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("store-updated"));
   }
@@ -126,7 +132,7 @@ const dispatchUpdate = () => {
 // Low-level read/write
 // ---------------------------------------------------------------------------
 
-function readRaw<T>(key: string): T | null {
+export function readRaw<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(key);
   if (!raw) return null;
@@ -135,6 +141,27 @@ function readRaw<T>(key: string): T | null {
   } catch {
     return null;
   }
+}
+
+// Persist + notify `store-updated` listeners. The canonical write path for the
+// lib/model/* slices (mirrors what the in-file slices do inline).
+export function writeRaw<T>(key: string, value: T): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(key, JSON.stringify(value));
+  dispatchUpdate();
+}
+
+// Whole-number age from a date string (ISO or parseable); undefined if blank/
+// unparseable. Age is always derived — never stored — so it can't go stale.
+export function ageFromDOB(dob?: string): number | undefined {
+  if (!dob) return undefined;
+  const d = new Date(dob);
+  if (isNaN(d.getTime())) return undefined;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +274,7 @@ export function mirrorWillToVault(will: { fileName: string; format?: string; dat
     id: "uploaded-will",
     title: "Last Will and Testament",
     type: "documents",
-    description: `Uploaded will: ${will.fileName}`,
+    description: `Will document: ${will.fileName}`,
     beneficiaries: ["Executor Only"],
     scope: "executor",
     encrypted: true,
@@ -458,7 +485,7 @@ function recordsFromUploadedDocuments(raw: Record<string, any>): VaultRecord[] {
   return out;
 }
 
-function dedupeById<T extends { id: string }>(items: T[]): T[] {
+export function dedupeById<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
   for (const item of items) {
@@ -661,4 +688,350 @@ export function deleteLiability(id: string): EstateLiability[] {
 
 export function getTotalLiabilities(): number {
   return loadLiabilities().reduce((sum, l) => sum + (l.balance || 0), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Estate assets — the value/ownership inventory (Phase A2).
+//
+// A different concern from the vault: the vault answers "where is it / how do
+// I get in" (documents, wallets, credentials, accounts); an EstateAsset answers
+// "what is it worth / who inherits it". The two live ALONGSIDE each other —
+// where an asset has custody material already in the vault (a crypto wallet's
+// seed phrase, a bank login), link to it via `vaultRecordId` rather than
+// duplicating. Net estate (A3) = Σ asset values − Σ liabilities.
+// ---------------------------------------------------------------------------
+
+export type EstateAssetType =
+  | "real-property"
+  | "vehicle"
+  | "personal-effect"
+  | "bank"
+  | "shares"
+  | "super"
+  | "business"
+  | "ip"
+  | "debt-owed"
+  | "safe-contents"
+  | "digital"
+  | "other";
+
+export interface EstateAsset {
+  id: string;
+  type: EstateAssetType;
+  title: string;
+  description?: string;
+  estimatedValue?: number; // dollar value, used for net-estate totals
+  institution?: string; // bank / fund / registry, where relevant
+  beneficiaryIds: string[]; // who inherits (Phase B will formalize gifts)
+  beneficiaryShares?: Record<string, number>; // beneficiaryId → % share of this asset
+  vaultRecordId?: string; // link to the vault record holding access/custody
+  source?: "setup" | "manual";
+  createdAt?: string; // ISO
+  lastModified?: string; // ISO
+}
+
+const ASSETS_KEY = "estate_assets";
+const ASSETS_MIGRATION_FLAG = "estate_assets_migrated_v1";
+
+// Map the legacy ad-hoc asset types (from the my-estate wizard) onto the
+// first-class union. Crypto becomes a `digital` asset — and is the canonical
+// case for linking to a vault `wallets` record via `vaultRecordId`.
+function mapLegacyAssetType(t: unknown): EstateAssetType {
+  switch (t) {
+    case "property":
+      return "real-property";
+    case "vehicle":
+      return "vehicle";
+    case "bank":
+      return "bank";
+    case "super":
+      return "super";
+    case "crypto":
+      return "digital";
+    default:
+      return "other";
+  }
+}
+
+// Legacy `estimatedValue` was free text ("$500,000", "1.5 BTC"). Pull out the
+// numeric part so net estate can sum it; non-numeric/crypto-unit entries become
+// undefined (the user can set a dollar figure in the typed form).
+function parseAssetValue(v: unknown): number | undefined {
+  if (typeof v === "number") return isFinite(v) ? v : undefined;
+  if (typeof v === "string") {
+    const n = parseFloat(v.replace(/[^0-9.]/g, ""));
+    return isNaN(n) ? undefined : n;
+  }
+  return undefined;
+}
+
+function mapLegacyAsset(a: any): EstateAsset {
+  return {
+    id: String(a?.id ?? `asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    type: mapLegacyAssetType(a?.type),
+    title: a?.title ?? "Untitled asset",
+    description: a?.description,
+    estimatedValue: parseAssetValue(a?.estimatedValue),
+    beneficiaryIds: Array.isArray(a?.beneficiaryIds) ? a.beneficiaryIds : [],
+    source: "setup",
+  };
+}
+
+function seedAssets(): EstateAsset[] {
+  return [
+    { id: "1", type: "real-property", title: "Family Home", estimatedValue: 850000, beneficiaryIds: [], source: "setup" },
+    { id: "2", type: "bank", title: "ANZ Everyday Savings", institution: "ANZ", estimatedValue: 45000, beneficiaryIds: [], source: "setup" },
+    { id: "3", type: "super", title: "AustralianSuper", institution: "AustralianSuper", estimatedValue: 185000, beneficiaryIds: [], source: "setup" },
+    { id: "4", type: "vehicle", title: "Toyota Camry", estimatedValue: 28000, beneficiaryIds: [], source: "setup" },
+  ];
+}
+
+let assetsMigrationRan = false;
+
+// One-time absorb of the legacy `setup_assets` key (the ad-hoc, string-valued
+// shape the my-estate wizard wrote before assets were first-class) into the
+// typed `estate_assets` slice. Idempotent; runs on first read and at boot.
+export function migrateEstateAssetsV1(): void {
+  if (typeof window === "undefined") return;
+  if (assetsMigrationRan) return;
+  if (localStorage.getItem(ASSETS_MIGRATION_FLAG) === "1") {
+    assetsMigrationRan = true;
+    return;
+  }
+  const legacy = readRaw<any[]>("setup_assets");
+  if (Array.isArray(legacy) && legacy.length > 0 && !readRaw<any[]>(ASSETS_KEY)) {
+    const migrated = dedupeById(legacy.map(mapLegacyAsset));
+    localStorage.setItem(ASSETS_KEY, JSON.stringify(migrated));
+  }
+  localStorage.removeItem("setup_assets");
+  localStorage.setItem(ASSETS_MIGRATION_FLAG, "1");
+  assetsMigrationRan = true;
+}
+
+export function loadAssets(): EstateAsset[] {
+  if (typeof window === "undefined") return [];
+  migrateEstateAssetsV1();
+  const raw = readRaw<EstateAsset[]>(ASSETS_KEY);
+  if (!Array.isArray(raw)) {
+    const seed = seedAssets();
+    localStorage.setItem(ASSETS_KEY, JSON.stringify(seed));
+    return seed;
+  }
+  return raw;
+}
+
+export function saveAssets(items: EstateAsset[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ASSETS_KEY, JSON.stringify(items));
+  dispatchUpdate();
+}
+
+export function addAsset(item: EstateAsset): EstateAsset[] {
+  const now = new Date().toISOString();
+  const updated = [...loadAssets(), { ...item, createdAt: item.createdAt ?? now, lastModified: now }];
+  saveAssets(updated);
+  return updated;
+}
+
+export function updateAsset(id: string, patch: Partial<EstateAsset>): EstateAsset[] {
+  const updated = loadAssets().map((a) =>
+    a.id === id ? { ...a, ...patch, lastModified: new Date().toISOString() } : a
+  );
+  saveAssets(updated);
+  return updated;
+}
+
+export function deleteAsset(id: string): EstateAsset[] {
+  const updated = loadAssets().filter((a) => a.id !== id);
+  saveAssets(updated);
+  return updated;
+}
+
+export function getTotalAssets(): number {
+  return loadAssets().reduce((sum, a) => sum + (a.estimatedValue || 0), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Net estate (Phase A3) — the headline figure: what's left for beneficiaries
+// after the executor settles debts. Σ assets − Σ liabilities.
+// ---------------------------------------------------------------------------
+
+export interface EstateSummary {
+  totalAssets: number;
+  totalLiabilities: number;
+  netEstate: number;
+}
+
+export function getEstateSummary(): EstateSummary {
+  const totalAssets = getTotalAssets();
+  const totalLiabilities = getTotalLiabilities();
+  return { totalAssets, totalLiabilities, netEstate: totalAssets - totalLiabilities };
+}
+
+// ---------------------------------------------------------------------------
+// Profile — the person behind the estate (name, DOB, address, marital status).
+// Entered once in setup (my-estate/about) and reused by the will wizard and the
+// Profile page. Canonical key stays `setup_personal_info` so the Sidebar and the
+// existing setup screen keep reading the same record (no migration needed).
+// ---------------------------------------------------------------------------
+
+export interface Dependent {
+  id: string;
+  name: string;
+  dateOfBirth?: string; // ISO; age is derived via ageFromDOB, never stored
+}
+
+// The testator record (MetaLaw Part B `testator.*`). Single source for identity
+// across setup, the Profile page, the will document, and the sidebar.
+export interface Profile {
+  fullName?: string;
+  dateOfBirth?: string;
+  address?: string;
+  maritalStatus?: "single" | "married" | "divorced" | "widowed" | "";
+  spouseName?: string;
+  occupation?: string; // Part B testator.occupation
+  hasPriorWill?: boolean; // testator.has_prior_will → revocation warning
+  contemplatedMarriage?: boolean; // testator.contemplated_marriage → s.12 language
+  children?: Dependent[]; // drives the guardian requirement (Part B Clause 4)
+}
+
+const PROFILE_KEY = "setup_personal_info";
+
+export function loadProfile(): Profile {
+  if (typeof window === "undefined") return {};
+  return readRaw<Profile>(PROFILE_KEY) || {};
+}
+
+export function saveProfile(patch: Partial<Profile>): Profile {
+  const next = { ...loadProfile(), ...patch };
+  if (typeof window !== "undefined") {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+    dispatchUpdate();
+  }
+  return next;
+}
+
+// Children under 18 — drives the guardian requirement (Part B Clause 4 /
+// validation `guardian_conditional`).
+export function getMinorChildren(): Dependent[] {
+  return (loadProfile().children ?? []).filter((c) => {
+    const age = ageFromDOB(c.dateOfBirth);
+    return age !== undefined && age < 18;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Will — one canonical record reconciling three legacy flows that never agreed
+// (AUDIT P1-16): `uploaded_will` (upload), `will_template` (template wizard),
+// and `will-current-draft-id`/`will-draft-*` (the builder). Every reader — the
+// readiness score, the Will page, the dashboard — asks getWillStatus()/hasWill()
+// here; each writer (upload, template, builder) populates this one record.
+// ---------------------------------------------------------------------------
+
+export type WillStatus = "none" | "draft" | "generated" | "uploaded";
+export type WillSource = "template" | "upload" | "builder";
+
+export interface StoredWill {
+  status: WillStatus;
+  source?: WillSource;
+  updatedAt: string; // ISO
+  // template-generated wills (app/will/create) — legacy shape, kept until the
+  // will UI is migrated to `doc` in a later milestone.
+  template?: Partial<WillTemplate>;
+  // Part B model (MetaLaw NSW). Canonical will-choices going forward; populated
+  // by migrateWillModelV1 from `template`.
+  doc?: WillDocument;
+  generatedAt?: string;
+  // uploaded wills (app/will upload)
+  fileName?: string;
+  format?: string;
+  data?: string; // base64 data URL, for download
+  physicalLocation?: string;
+  uploadedAt?: string;
+  // builder drafts (app/will/builder) — rich WillData stays under will-draft-{id}
+  draftId?: string;
+}
+
+const WILL_KEY = "will";
+const WILL_MIGRATION_FLAG = "will_migrated_v1";
+const NO_WILL: StoredWill = { status: "none", updatedAt: "" };
+
+let willMigrationRan = false;
+
+// Idempotent one-time fold of the three legacy will keys into `will`.
+export function migrateWillV1(): void {
+  if (typeof window === "undefined") return;
+  if (willMigrationRan) return;
+  if (localStorage.getItem(WILL_MIGRATION_FLAG) === "1") {
+    willMigrationRan = true;
+    return;
+  }
+  if (!readRaw<StoredWill>(WILL_KEY)) {
+    const uploaded = readRaw<any>("uploaded_will");
+    const template = readRaw<any>("will_template");
+    const draftId = readRaw<string>("will-current-draft-id");
+    let record: StoredWill | null = null;
+    if (uploaded) {
+      record = {
+        status: "uploaded",
+        source: "upload",
+        updatedAt: uploaded.uploadedAt || new Date().toISOString(),
+        fileName: uploaded.fileName,
+        format: uploaded.format,
+        data: uploaded.data,
+        physicalLocation: uploaded.physicalLocation,
+        uploadedAt: uploaded.uploadedAt,
+      };
+    } else if (template) {
+      record = {
+        status: template.status === "generated" ? "generated" : "draft",
+        source: "template",
+        updatedAt: template.lastModified || new Date().toISOString(),
+        template,
+        generatedAt: template.generatedAt,
+      };
+    } else if (draftId) {
+      record = { status: "draft", source: "builder", updatedAt: new Date().toISOString(), draftId };
+    }
+    if (record) localStorage.setItem(WILL_KEY, JSON.stringify(record));
+  }
+  // template/upload keys are fully absorbed; the builder keeps its own working
+  // draft under will-draft-* so we leave those in place.
+  localStorage.removeItem("uploaded_will");
+  localStorage.removeItem("will_template");
+  localStorage.setItem(WILL_MIGRATION_FLAG, "1");
+  willMigrationRan = true;
+}
+
+export function loadWill(): StoredWill {
+  if (typeof window === "undefined") return NO_WILL;
+  migrateWillV1();
+  const raw = readRaw<StoredWill>(WILL_KEY);
+  return raw && raw.status ? raw : NO_WILL;
+}
+
+export function saveWill(patch: Partial<StoredWill>): StoredWill {
+  const next: StoredWill = { ...loadWill(), ...patch, updatedAt: new Date().toISOString() };
+  if (typeof window !== "undefined") {
+    localStorage.setItem(WILL_KEY, JSON.stringify(next));
+    dispatchUpdate();
+  }
+  return next;
+}
+
+export function clearWill(): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(WILL_KEY, JSON.stringify(NO_WILL));
+  dispatchUpdate();
+}
+
+export function getWillStatus(): WillStatus {
+  return loadWill().status;
+}
+
+// A *completed* will (generated or uploaded) — a draft in progress doesn't yet
+// count toward readiness.
+export function hasWill(): boolean {
+  const s = loadWill().status;
+  return s === "generated" || s === "uploaded";
 }
