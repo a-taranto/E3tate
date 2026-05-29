@@ -709,6 +709,7 @@ export type EstateAssetType =
   | "bank"
   | "shares"
   | "super"
+  | "life-insurance"
   | "business"
   | "ip"
   | "debt-owed"
@@ -726,6 +727,7 @@ export interface EstateAsset {
   beneficiaryIds: string[]; // who inherits (Phase B will formalize gifts)
   beneficiaryShares?: Record<string, number>; // beneficiaryId → % share of this asset
   jointlyOwned?: boolean; // passes outside the estate by survivorship → excluded from net estate
+  details?: Record<string, string>; // type-specific fields (BSB, BDBN, policy no., rego, …) for the Schedule-1 annexure
   vaultRecordId?: string; // link to the vault record holding access/custody
   source?: "setup" | "manual";
   createdAt?: string; // ISO
