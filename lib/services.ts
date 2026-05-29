@@ -1,6 +1,8 @@
 // Service Database for E3tate Guided Setup
 // Service-first architecture for onboarding
 
+import { loadCustomServices } from "./customServices";
+
 export type ServiceCategory =
   | "email"
   | "social"
@@ -124,22 +126,6 @@ export const SERVICES: ServiceDefinition[] = [
     hasLegacyContact: false,
     createsVaultType: "Credentials",
   },
-  {
-    id: "protonmail",
-    name: "ProtonMail",
-    logo: "https://cdn.simpleicons.org/protonmail",
-    category: "email",
-    fields: [
-      { id: "email", label: "Email Address", type: "email", required: true, placeholder: "you@proton.me" },
-    ],
-    availableActions: ["delete", "download_first"],
-    defaultAction: "download_first",
-    hasSubscription: true,
-    has2FA: true,
-    hasMemorialization: false,
-    hasLegacyContact: false,
-    createsVaultType: "Credentials",
-  },
 
   // SOCIAL MEDIA
   {
@@ -209,23 +195,6 @@ export const SERVICES: ServiceDefinition[] = [
     hasSubscription: true,
     has2FA: true,
     hasMemorialization: true,
-    hasLegacyContact: false,
-    createsVaultType: "Credentials",
-  },
-  {
-    id: "tiktok",
-    name: "TikTok",
-    logo: "https://cdn.simpleicons.org/tiktok",
-    category: "social",
-    fields: [
-      { id: "username", label: "Username", type: "text", required: true, placeholder: "@username" },
-      { id: "email", label: "Email", type: "email", required: false, placeholder: "you@example.com" },
-    ],
-    availableActions: ["delete", "download_first"],
-    defaultAction: "delete",
-    hasSubscription: false,
-    has2FA: true,
-    hasMemorialization: false,
     hasLegacyContact: false,
     createsVaultType: "Credentials",
   },
@@ -521,12 +490,20 @@ export const SERVICES: ServiceDefinition[] = [
 ];
 
 // Helper Functions
+
+// Preset services + any user-added custom services (client-side only).
+// (customServices imports only our *types*, so this static import has no
+// runtime cycle.)
+export function getAllServices(): ServiceDefinition[] {
+  return [...SERVICES, ...loadCustomServices()];
+}
+
 export function getServicesByCategory(category: ServiceCategory): ServiceDefinition[] {
-  return SERVICES.filter((service) => service.category === category);
+  return getAllServices().filter((service) => service.category === category);
 }
 
 export function getServiceById(id: string): ServiceDefinition | undefined {
-  return SERVICES.find((service) => service.id === id);
+  return getAllServices().find((service) => service.id === id);
 }
 
 export function getAllCategories(): { id: ServiceCategory; label: string; icon: string; count: number }[] {

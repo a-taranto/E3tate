@@ -32,7 +32,7 @@ export default function ServiceCard({ service, selected, onToggle }: ServiceCard
       {/* Service Logo */}
       <div className="flex flex-col items-center gap-3">
         <div className="w-16 h-16 flex items-center justify-center overflow-hidden">
-          {!imageError ? (
+          {service.logo && !imageError ? (
             <img
               src={service.logo}
               alt={service.name}

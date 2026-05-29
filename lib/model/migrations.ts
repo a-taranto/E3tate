@@ -9,9 +9,14 @@ import {
   loadLiabilities,
   loadWill,
   saveWill,
+  loadProfile,
+  saveProfile,
   loadBeneficiaries,
+  saveBeneficiaries,
+  isChildRelationship,
   type EstateAsset,
   type LiabilityKind,
+  type Beneficiary,
 } from "@/lib/store";
 import { loadInventory, saveInventory, type EstateInventory, type LiabilityNature } from "./inventory";
 import { loadSuperInsurance, saveSuperInsurance } from "./superInsurance";
@@ -101,7 +106,58 @@ export function migrateWillModelV1(): void {
   localStorage.setItem("will_model_v1", "1");
 }
 
+// profile.children + profile.spouseName → first-class People entries, so family
+// members can be assigned gifts/legacies and the guardian rule reads them from
+// People. Idempotent; leaves marital status on the profile.
+export function migrateFamilyToPeopleV1(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem("family_to_people_v1") === "1") return;
+
+  const profile = loadProfile();
+  const people = loadBeneficiaries();
+  const additions: Beneficiary[] = [];
+
+  // Children → People (relationship "child", carry DOB for the guardian rule).
+  (profile.children ?? []).forEach((c) => {
+    if (!c.name?.trim()) return;
+    const exists = people.some((p) => isChildRelationship(p.relationship) && p.name === c.name);
+    if (exists) return;
+    additions.push({
+      id: `person-child-${c.id}`,
+      name: c.name,
+      email: "",
+      role: "beneficiary",
+      status: "draft",
+      relationship: "child",
+      dateOfBirth: c.dateOfBirth,
+    });
+  });
+
+  // Spouse → People (relationship "spouse"), if named and not already present.
+  if (profile.spouseName?.trim()) {
+    const exists = people.some(
+      (p) => (p.relationship || "").toLowerCase() === "spouse" || p.name === profile.spouseName
+    );
+    if (!exists) {
+      additions.push({
+        id: `person-spouse-${Date.now()}`,
+        name: profile.spouseName,
+        email: "",
+        role: "beneficiary",
+        status: "draft",
+        relationship: "spouse",
+      });
+    }
+  }
+
+  if (additions.length > 0) saveBeneficiaries([...people, ...additions]);
+  // Family now lives in People; drop the profile copy of children.
+  if (profile.children) saveProfile({ children: [] });
+  localStorage.setItem("family_to_people_v1", "1");
+}
+
 export function runModelMigrations(): void {
   migrateInventoryV1();
   migrateWillModelV1();
+  migrateFamilyToPeopleV1();
 }

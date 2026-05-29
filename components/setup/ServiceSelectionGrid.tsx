@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { SERVICE_CATEGORIES, SERVICES, ServiceDefinition, ServiceCategory } from "@/lib/services";
+import { useState, useMemo, useEffect } from "react";
+import { SERVICE_CATEGORIES, getAllServices, ServiceDefinition, ServiceCategory } from "@/lib/services";
+import { addCustomService } from "@/lib/customServices";
 import ServiceCard from "./ServiceCard";
 import { Button } from "@/components/ui";
 import {
@@ -11,12 +12,9 @@ import {
   Users,
   Cloud,
   Image as ImageIcon,
-  Film,
   Sparkles,
   DollarSign,
   Coins,
-  ShoppingBag,
-  ArrowRight,
 } from "lucide-react";
 
 // Map category IDs to Lucide icons
@@ -31,28 +29,62 @@ const CATEGORY_ICONS: Record<ServiceCategory, any> = {
 };
 
 interface ServiceSelectionGridProps {
-  selectedServiceIds: string[];
-  onToggleService: (serviceId: string) => void;
-  onContinue: () => void;
+  configuredIds: string[]; // services that have details saved
+  onOpenService: (serviceId: string) => void; // open the details modal
 }
 
 export default function ServiceSelectionGrid({
-  selectedServiceIds,
-  onToggleService,
-  onContinue,
+  configuredIds,
+  onOpenService,
 }: ServiceSelectionGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  // Preset + custom services (custom only resolves client-side).
+  const [services, setServices] = useState<ServiceDefinition[]>([]);
+  // Per-category inline "add a service" form.
+  const [addCategory, setAddCategory] = useState<ServiceCategory | null>(null);
+  const [newServiceName, setNewServiceName] = useState("");
+
+  useEffect(() => {
+    setServices(getAllServices());
+  }, []);
+
+  // Scroll to the category section named in the URL hash (sidebar sub-menu).
+  useEffect(() => {
+    const scrollToHash = () => {
+      const id = window.location.hash.slice(1);
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    const t = setTimeout(scrollToHash, 60); // let the grid paint first
+    window.addEventListener("hashchange", scrollToHash);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("hashchange", scrollToHash);
+    };
+  }, [services]);
+
+  const searching = !!searchQuery.trim();
 
   // Filter services based on search query
   const filteredServices = useMemo(() => {
-    if (!searchQuery.trim()) return SERVICES;
+    if (!searching) return services;
     const query = searchQuery.toLowerCase();
-    return SERVICES.filter(
+    return services.filter(
       (service) =>
         service.name.toLowerCase().includes(query) ||
         service.category.toLowerCase().includes(query)
     );
-  }, [searchQuery]);
+  }, [searchQuery, searching, services]);
+
+  const submitNewService = (category: ServiceCategory) => {
+    if (!newServiceName.trim()) return;
+    const def = addCustomService(newServiceName, category);
+    setServices(getAllServices());
+    setNewServiceName("");
+    setAddCategory(null);
+    onOpenService(def.id); // open the details modal for the new service
+  };
 
   // Group filtered services by category
   const servicesByCategory = useMemo(() => {
@@ -67,7 +99,7 @@ export default function ServiceSelectionGrid({
     };
 
     filteredServices.forEach((service) => {
-      grouped[service.category].push(service);
+      grouped[service.category]?.push(service);
     });
 
     return grouped;
@@ -96,12 +128,14 @@ export default function ServiceSelectionGrid({
       <div className="flex-1 overflow-y-auto space-y-8 pb-24">
         {SERVICE_CATEGORIES.map((category) => {
           const categoryServices = servicesByCategory[category.id];
-          if (categoryServices.length === 0) return null;
+          // When searching, hide categories with no matches; otherwise always
+          // show the category so its "Add service" affordance is available.
+          if (searching && categoryServices.length === 0) return null;
 
           const CategoryIcon = CATEGORY_ICONS[category.id];
 
           return (
-            <div key={category.id}>
+            <section key={category.id} id={category.id} className="scroll-mt-6">
               {/* Category Header */}
               <div className="flex items-center gap-3 mb-4">
                 <CategoryIcon className="h-6 w-6" style={{ color: "var(--accent)" }} />
@@ -115,84 +149,59 @@ export default function ServiceSelectionGrid({
                 </div>
               </div>
 
-              {/* Service Cards Grid */}
+              {/* Service Cards Grid + per-category Add */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {categoryServices.map((service) => (
                   <ServiceCard
                     key={service.id}
                     service={service}
-                    selected={selectedServiceIds.includes(service.id)}
-                    onToggle={() => onToggleService(service.id)}
+                    selected={configuredIds.includes(service.id)}
+                    onToggle={() => onOpenService(service.id)}
                   />
                 ))}
+
+                {addCategory === category.id ? (
+                  <div
+                    className="p-4 rounded-xl border-2 flex flex-col gap-2 justify-center"
+                    style={{ borderColor: "var(--accent)" }}
+                  >
+                    <input
+                      autoFocus
+                      type="text"
+                      className="input w-full text-sm"
+                      placeholder={`${category.label} service name`}
+                      value={newServiceName}
+                      onChange={(e) => setNewServiceName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitNewService(category.id);
+                        if (e.key === "Escape") { setAddCategory(null); setNewServiceName(""); }
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="primary" size="sm" onClick={() => submitNewService(category.id)} disabled={!newServiceName.trim()}>
+                        Add
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setAddCategory(null); setNewServiceName(""); }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setAddCategory(category.id); setNewServiceName(""); }}
+                    className="p-4 rounded-xl border-2 border-dashed transition-all duration-200 hover:shadow-lg flex flex-col items-center justify-center gap-2 min-h-[120px]"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <Plus className="h-7 w-7" style={{ color: "var(--accent)" }} />
+                    <span className="text-xs font-medium text-center" style={{ color: "var(--text-secondary)" }}>
+                      Add service
+                    </span>
+                  </button>
+                )}
               </div>
-            </div>
+            </section>
           );
         })}
-
-        {/* Add Custom Service Card */}
-        <div>
-          <div className="flex items-center gap-3 mb-4">
-            <Plus className="h-6 w-6" style={{ color: "var(--accent)" }} />
-            <div>
-              <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                Custom Services
-              </h3>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                Add services not listed above
-              </p>
-            </div>
-          </div>
-
-          <button
-            className="w-full md:w-auto p-6 rounded-xl border-2 border-dashed transition-all duration-200 hover:shadow-lg"
-            style={{
-              borderColor: "var(--border)",
-            }}
-            onClick={() => {
-              // TODO: Open custom service dialog
-              alert("Custom service creation coming soon!");
-            }}
-          >
-            <div className="flex flex-col items-center gap-2">
-              <Plus className="h-8 w-8" style={{ color: "var(--accent)" }} />
-              <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                Add Custom Service
-              </p>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Fixed Bottom Bar - Selected Count & Continue */}
-      <div
-        className="fixed bottom-0 left-64 right-0 p-6 border-t backdrop-blur-sm"
-        style={{
-          borderColor: "var(--border)",
-        }}
-      >
-        <div className="container mx-auto px-8 max-w-6xl flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-              {selectedServiceIds.length} service{selectedServiceIds.length !== 1 ? "s" : ""}{" "}
-              selected
-            </p>
-            {selectedServiceIds.length > 0 && (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                We'll guide you through setting up each one
-              </p>
-            )}
-          </div>
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={onContinue}
-            disabled={selectedServiceIds.length === 0}
-          >
-            Continue
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
       </div>
     </div>
   );

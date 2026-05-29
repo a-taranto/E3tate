@@ -16,7 +16,7 @@ import {
   Vault,
   LayoutDashboard,
 } from "lucide-react";
-import { getSetupSummary, processSetupServices } from "@/lib/vaultUtils";
+import { getSetupSummary } from "@/lib/vaultUtils";
 
 export default function SetupCompletePage() {
   const router = useRouter();
@@ -30,12 +30,9 @@ export default function SetupCompletePage() {
   });
 
   useEffect(() => {
-    // Process all services and create vault records
-    processSetupServices();
-
-    // Get summary
-    const stats = getSetupSummary();
-    setSummary(stats);
+    // Service vault records are now created when each service is saved on the
+    // Online step (saveServiceToVault), so no batch processing is needed here.
+    setSummary(getSetupSummary());
   }, []);
 
   const handleGoToDashboard = () => {

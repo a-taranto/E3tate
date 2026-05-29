@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { loadSettings, getCheckInStatus } from "@/lib/store";
+import { SERVICE_CATEGORIES } from "@/lib/services";
 import {
   LayoutDashboard,
   Vault,
@@ -41,12 +42,11 @@ const navigation: NavNode[] = [
       {
         name: "Online & Digital",
         href: "/my-estate/online",
-        children: [
-          { name: "Accounts & subscriptions", href: "/my-estate/online#accounts" },
-          { name: "Crypto & wallets", href: "/my-estate/online#crypto" },
-          { name: "Social & email", href: "/my-estate/online#social" },
-          { name: "Domains & IP", href: "/my-estate/online#domains" },
-        ],
+        // Sub-items mirror the actual service categories on the page.
+        children: SERVICE_CATEGORIES.map((c) => ({
+          name: c.label,
+          href: `/my-estate/online#${c.id}`,
+        })),
       },
       { name: "Will", href: "/will" },
     ],
@@ -65,11 +65,25 @@ export default function Sidebar() {
   const [profileName, setProfileName] = useState("");
   const [open, setOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [currentHash, setCurrentHash] = useState("");
+
+  // Track the URL hash so only the matching sub-item (e.g. a category section)
+  // highlights — usePathname() excludes the hash.
+  useEffect(() => {
+    const update = () => setCurrentHash(typeof window !== "undefined" ? window.location.hash.slice(1) : "");
+    update();
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, [pathname]);
 
   const hrefMatches = (href: string) => {
-    const base = href.split("#")[0];
+    const [base, hash] = href.split("#");
     if (base === "/") return pathname === "/";
-    return pathname === base || pathname.startsWith(base + "/");
+    const pathOk = pathname === base || pathname.startsWith(base + "/");
+    if (!pathOk) return false;
+    // A hash link is active only when its hash matches the current one; a plain
+    // link is active on any path match.
+    return hash ? currentHash === hash : true;
   };
   const isDescendantActive = (node: NavNode): boolean =>
     hrefMatches(node.href) || (node.children?.some(isDescendantActive) ?? false);
@@ -118,7 +132,17 @@ export default function Sidebar() {
         <div className="flex items-center">
           <Link
             href={node.href}
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              setOpen(false);
+              // Next's hash navigation doesn't reliably fire `hashchange`, so
+              // update the active hash + scroll directly. (Cross-page loads are
+              // handled by the target page reading location.hash on mount.)
+              const hash = node.href.split("#")[1];
+              if (hash) {
+                setCurrentHash(hash);
+                setTimeout(() => document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+              }
+            }}
             className="flex-1 flex items-center gap-3 rounded-md py-2 text-sm font-medium transition-colors min-w-0"
             style={{
               paddingLeft: `${12 + depth * 16}px`,

@@ -2,8 +2,7 @@
 // Auto-create vault records from service setup
 
 import { ServiceDefinition } from "./services";
-import { VaultRecord } from "@/types";
-import { loadAssets } from "./store";
+import { loadAssets, upsertVaultRecord, toPrimaryType, type VaultRecord as StoreVaultRecord } from "./store";
 
 interface ServiceFormData {
   // Account details (dynamic based on service.fields)
@@ -27,54 +26,41 @@ interface ServiceFormData {
 }
 
 /**
- * Create a Vault record from a service setup form
+ * Save (insert or update) a vault record for a configured online service,
+ * through the unified store. Uses a stable id (`service-<id>`) so re-saving the
+ * same service updates its record instead of duplicating it. This is the
+ * canonical path now that the Online step saves each service at modal time.
  */
-export function createVaultRecordFromService(
-  service: ServiceDefinition,
-  formData: ServiceFormData,
-  userId?: string
-): VaultRecord {
-  const now = new Date();
-
-  // Determine beneficiaries from wish action
+export function saveServiceToVault(service: ServiceDefinition, formData: ServiceFormData): void {
   const beneficiaries: string[] = [];
   if (formData.wishAction === "transfer" && formData.transferBeneficiary) {
     beneficiaries.push(formData.transferBeneficiary);
   }
 
-  return {
-    id: `service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  const record: StoreVaultRecord = {
+    id: `service-${service.id}`,
     title: service.name,
-    type: service.createsVaultType,
+    type: toPrimaryType(service.createsVaultType),
     subtype: service.category,
     category: "personal",
     source: "profile",
     description: buildDescription(service, formData),
     institution: service.name,
-    encrypted: true,
     beneficiaries,
-    createdAt: now,
-    updatedAt: now,
-
-    // Service-specific fields
+    encrypted: true,
     serviceId: service.id,
     hasCredentials: formData.storeCredentials,
-
+    createdAt: new Date().toISOString(),
+    lastModified: "Just now",
     wish: {
       action: formData.wishAction,
       transferTo: formData.transferBeneficiary,
       legacyContact: formData.legacyContact,
       instructions: formData.additionalInstructions,
     },
-
     subscription: service.hasSubscription
-      ? {
-          cost: formData.monthlyCost,
-          plan: formData.plan,
-        }
+      ? { cost: formData.monthlyCost, plan: formData.plan }
       : undefined,
-
-    // Store account details in metadata
     metadata: {
       accountDetails: formData.accountDetails,
       has2FA: service.has2FA,
@@ -82,8 +68,11 @@ export function createVaultRecordFromService(
       hasMemorialization: service.hasMemorialization,
       hasLegacyContact: service.hasLegacyContact,
       deathPolicyUrl: service.deathPolicyUrl,
+      category: service.category,
     },
   };
+
+  upsertVaultRecord(record);
 }
 
 /**
@@ -109,77 +98,6 @@ function buildDescription(service: ServiceDefinition, formData: ServiceFormData)
   }
 
   return parts.join(" • ");
-}
-
-/**
- * Load all vault records from localStorage
- */
-export function loadVaultRecords(): VaultRecord[] {
-  if (typeof window === "undefined") return [];
-
-  const stored = localStorage.getItem("vault_records");
-  if (!stored) return [];
-
-  try {
-    const records = JSON.parse(stored);
-    // Convert date strings back to Date objects
-    return records.map((r: any) => ({
-      ...r,
-      createdAt: new Date(r.createdAt),
-      updatedAt: new Date(r.updatedAt),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Save vault records to localStorage
- */
-export function saveVaultRecords(records: VaultRecord[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("vault_records", JSON.stringify(records));
-}
-
-/**
- * Add a single vault record
- */
-export function addVaultRecord(record: VaultRecord): void {
-  const existing = loadVaultRecords();
-  const updated = [...existing, record];
-  saveVaultRecords(updated);
-}
-
-/**
- * Process all services from setup and create vault records
- */
-export function processSetupServices(): VaultRecord[] {
-  if (typeof window === "undefined") return [];
-
-  const selectedServices = JSON.parse(localStorage.getItem("setup_selected_services") || "[]");
-  const serviceData = JSON.parse(localStorage.getItem("setup_service_data") || "{}");
-
-  const newRecords: VaultRecord[] = [];
-
-  // Import services dynamically
-  import("./services").then(({ getServiceById }) => {
-    selectedServices.forEach((serviceId: string) => {
-      const service = getServiceById(serviceId);
-      const formData = serviceData[serviceId];
-
-      if (service && formData) {
-        const record = createVaultRecordFromService(service, formData);
-        newRecords.push(record);
-      }
-    });
-
-    // Add to existing vault records
-    const existing = loadVaultRecords();
-    const updated = [...existing, ...newRecords];
-    saveVaultRecords(updated);
-  });
-
-  return newRecords;
 }
 
 /**
