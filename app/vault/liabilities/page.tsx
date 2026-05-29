@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Header from "@/components/layout/Header";
 import { Card, Button } from "@/components/ui";
 import { Landmark, Plus, Trash2, ArrowRight, ArrowLeft } from "lucide-react";
 import {
@@ -54,15 +55,11 @@ export default function SetupLiabilitiesPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
-          Your liabilities
-        </h2>
-        <p className="text-lg" style={{ color: "var(--text-secondary)" }}>
-          Record debts your executor must settle before distributing the estate. These reduce your net estate.
-        </p>
-      </div>
+    <div>
+      <Header
+        title="Your liabilities"
+        subtitle="Record debts your executor must settle before distributing the estate. These reduce your net estate."
+      />
 
       {/* Count + Add */}
       <div className="flex items-center justify-between gap-4 mb-6">

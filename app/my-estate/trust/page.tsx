@@ -13,6 +13,7 @@ import {
   type TestamentaryTrust,
 } from "@/lib/model/trust";
 import { recommendTestamentaryTrust, type TrustRecommendation } from "@/lib/model/computations";
+import Header from "@/components/layout/Header";
 
 const surnameFromName = (full?: string) => {
   const parts = (full || "").trim().split(/\s+/).filter(Boolean);
@@ -67,16 +68,11 @@ export default function TestamentaryTrustPage() {
   const trusteeCandidates = people.filter((p) => p.role === "trustee" || p.role === "executor");
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>
-          Testamentary Trust
-        </h2>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          An optional addendum that holds part of your estate in a discretionary trust instead of
-          distributing it outright — used for asset protection and tax-effective provision for family.
-        </p>
-      </div>
+    <div>
+      <Header
+        title="Testamentary Trust"
+        subtitle="An optional addendum that holds part of your estate in a discretionary trust instead of distributing it outright — used for asset protection and tax-effective provision for family."
+      />
 
       {/* Recommendation */}
       {rec.level !== "low" && (

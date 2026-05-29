@@ -152,9 +152,9 @@ export default function WillPage() {
 
   if (showOptions) {
     return (
-      <div className="flex-1 overflow-y-auto">
+      <div>
         <Header title="Will" subtitle="Upload your existing will or create one from our template" />
-        <div className="container mx-auto px-8 py-8 max-w-5xl">
+        <div>
           {replacing && (
             <div className="mb-6">
               <Button variant="ghost" size="sm" onClick={() => setReplacing(false)}>
@@ -235,12 +235,12 @@ export default function WillPage() {
   // -------------------------------------------------------------------------
   if (render && !isUploaded) {
     return (
-      <div className="flex-1 overflow-y-auto">
+      <div>
         <Header
           title="Will"
           subtitle={isGenerated ? "Your last will and testament" : "Draft preview — built from your estate details"}
         />
-        <div className="container mx-auto px-8 py-8 max-w-5xl">
+        <div>
           {/* Action bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             {isGenerated ? (
@@ -338,7 +338,7 @@ export default function WillPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <Header title="Will" subtitle="Your last will and testament" />
-      <div className="container mx-auto px-8 py-8 max-w-4xl">
+      <div>
         <Card padding="lg" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--success)" }}>
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-xl" style={{ backgroundColor: "var(--success-bg)" }}>

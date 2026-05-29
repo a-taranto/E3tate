@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Header from "@/components/layout/Header";
 import { Card, Button } from "@/components/ui";
 import {
   Home,
@@ -340,15 +341,11 @@ export default function SetupAssetsPage() {
   );
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
-          Your assets
-        </h2>
-        <p className="text-lg" style={{ color: "var(--text-secondary)" }}>
-          Record what you own and what it&apos;s worth. This drives your net estate and, later, who inherits each item.
-        </p>
-      </div>
+    <div>
+      <Header
+        title="Your assets"
+        subtitle="Record what you own and what it's worth. This drives your net estate and, later, who inherits each item."
+      />
 
       {/* Count + Add */}
       <div className="flex items-center justify-between gap-4 mb-6">

@@ -1,5 +1,7 @@
 "use client";
 
+import Header from "@/components/layout/Header";
+
 import { useEffect, useState } from "react";
 import { Card, Button } from "@/components/ui";
 import { Coins, Plus, Trash2 } from "lucide-react";
@@ -47,15 +49,11 @@ export default function CashLegaciesPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Cash Legacies</h2>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            Fixed sums of money left to people or charities, paid before the residuary estate is distributed.
-          </p>
-        </div>
-        <Button variant="primary" onClick={() => setShowForm((s) => !s)}><Plus className="h-4 w-4" />Add Legacy</Button>
-      </div>
+      <Header
+        title="Cash Legacies"
+        subtitle="Fixed sums of money left to people or charities, paid before the residuary estate is distributed."
+        action={<Button variant="primary" onClick={() => setShowForm((s) => !s)}><Plus className="h-4 w-4" />Add Legacy</Button>}
+      />
 
       {showForm && (
         <Card padding="lg" className="mb-6" style={{ borderColor: "var(--accent)", borderWidth: "1px" }}>

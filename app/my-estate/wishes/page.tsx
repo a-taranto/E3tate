@@ -1,5 +1,7 @@
 "use client";
 
+import Header from "@/components/layout/Header";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
@@ -49,10 +51,10 @@ export default function WishesPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Guardian &amp; Wishes</h2>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Appoint a guardian for minor children and record your funeral wishes.</p>
-      </div>
+      <Header
+        title="Guardian & Wishes"
+        subtitle="Appoint a guardian for minor children and record your funeral wishes."
+      />
 
       {/* Guardian */}
       <Card padding="lg" className="mb-6">

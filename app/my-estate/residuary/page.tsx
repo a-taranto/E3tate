@@ -1,5 +1,7 @@
 "use client";
 
+import Header from "@/components/layout/Header";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
@@ -56,12 +58,10 @@ export default function ResiduaryPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Residuary Estate</h2>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Everything left after debts, gifts, and cash legacies. Split it among your beneficiaries — the shares must total 100%.
-        </p>
-      </div>
+      <Header
+        title="Residuary Estate"
+        subtitle="Everything left after debts, gifts, and cash legacies. Split it among your beneficiaries — the shares must total 100%."
+      />
 
       {people.length === 0 ? (
         <Card padding="lg" className="text-center">
