@@ -725,6 +725,7 @@ export interface EstateAsset {
   institution?: string; // bank / fund / registry, where relevant
   beneficiaryIds: string[]; // who inherits (Phase B will formalize gifts)
   beneficiaryShares?: Record<string, number>; // beneficiaryId → % share of this asset
+  jointlyOwned?: boolean; // passes outside the estate by survivorship → excluded from net estate
   vaultRecordId?: string; // link to the vault record holding access/custody
   source?: "setup" | "manual";
   createdAt?: string; // ISO

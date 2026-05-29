@@ -31,27 +31,40 @@ type NavNode = {
 // Digital within it). Other pages can gain sub-menus the same way.
 const navigation: NavNode[] = [
   { name: "Overview", href: "/", icon: LayoutDashboard },
+  // Vault = the inventory/"wallet": you add the details of everything you hold.
+  {
+    name: "Vault",
+    href: "/vault",
+    icon: Vault,
+    children: [
+      { name: "Documents & Records", href: "/vault" },
+      { name: "Assets", href: "/vault/assets" },
+      { name: "Liabilities", href: "/vault/liabilities" },
+      {
+        name: "Accounts & Online",
+        href: "/vault/online",
+        children: SERVICE_CATEGORIES.map((c) => ({
+          name: c.label,
+          href: `/vault/online#${c.id}`,
+        })),
+      },
+    ],
+  },
+  // My Estate = the plan: who gets what, read from the Vault inventory.
   {
     name: "My Estate",
     href: "/people",
     icon: User,
     children: [
       { name: "People", href: "/people" },
-      { name: "Assets", href: "/my-estate/assets" },
-      { name: "Liabilities", href: "/my-estate/liabilities" },
-      {
-        name: "Online & Digital",
-        href: "/my-estate/online",
-        // Sub-items mirror the actual service categories on the page.
-        children: SERVICE_CATEGORIES.map((c) => ({
-          name: c.label,
-          href: `/my-estate/online#${c.id}`,
-        })),
-      },
+      { name: "Specific Gifts", href: "/my-estate/gifts" },
+      { name: "Cash Legacies", href: "/my-estate/legacies" },
+      { name: "Residuary Estate", href: "/my-estate/residuary" },
+      { name: "Digital Register", href: "/my-estate/digital" },
+      { name: "Guardian & Wishes", href: "/my-estate/wishes" },
       { name: "Will", href: "/will" },
     ],
   },
-  { name: "Vault", href: "/vault", icon: Vault },
   { name: "Triggers", href: "/triggers", icon: Zap },
   { name: "Activity", href: "/activity", icon: History },
   { name: "Settings", href: "/settings", icon: Settings },
