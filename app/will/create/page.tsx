@@ -3,554 +3,233 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
-import { Card, Button, Input } from "@/components/ui";
+import { Card, Button } from "@/components/ui";
 import {
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle,
   AlertCircle,
-  User,
-  Users,
-  Gift,
-  Baby,
-  Heart,
+  CheckCircle,
   FileText,
+  Download,
+  ArrowRight,
+  Shield,
+  X,
 } from "lucide-react";
-import type { WillTemplate } from "@/types";
 import { logActivity } from "@/lib/activityLogger";
 import {
   loadBeneficiaries,
   loadProfile,
-  saveProfile,
   loadWill,
   saveWill,
   mirrorWillToVault,
+  getMinorChildren,
   type Beneficiary,
 } from "@/lib/store";
+import { getEffectiveWillDoc, updateWillDoc } from "@/lib/model/will";
+import { validateWill, type ValidationResult } from "@/lib/model/validations";
+import { renderWillText } from "@/lib/willRenderer";
 import { toast } from "@/components/ui/Toaster";
-import ComingSoon from "@/components/ui/ComingSoon";
 
-export default function CreateWillPage() {
+const fmtAUD = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
+
+export default function ReviewWillPage() {
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState(1);
-  const [willData, setWillData] = useState<Partial<WillTemplate>>({
-    status: "draft",
-    jurisdiction: "AU",
-    residuaryBeneficiaries: [],
-    specificBequests: [],
-    hasMinorChildren: false,
-    funeralPreference: "no_preference",
-    version: 1,
-    createdAt: new Date().toISOString(),
-    lastModified: new Date().toISOString(),
-  });
+  const [people, setPeople] = useState<Beneficiary[]>([]);
+  const [primaryId, setPrimaryId] = useState("");
+  const [substituteId, setSubstituteId] = useState("");
+  const [issues, setIssues] = useState<ValidationResult[]>([]);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [tick, setTick] = useState(0); // re-derive summary after edits
 
-  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
   useEffect(() => {
-    setBeneficiaries(loadBeneficiaries());
-    // Open at a specific step when deep-linked from the will document (e.g. ?step=5).
-    const stepParam = parseInt(new URLSearchParams(window.location.search).get("step") || "", 10);
-    if (stepParam >= 1 && stepParam <= 6) setCurrentStep(stepParam);
-    // Resume an existing template will if one exists; otherwise prefill the
-    // identity fields from the shared profile so they aren't re-entered.
-    const existing = loadWill();
-    const profile = loadProfile();
-    setWillData((prev) => {
-      const base = existing.source === "template" && existing.template ? existing.template : {};
-      return {
-        ...prev,
-        ...base,
-        fullName: base.fullName || profile.fullName || prev.fullName || "",
-        dateOfBirth: base.dateOfBirth || profile.dateOfBirth || prev.dateOfBirth || "",
-        address: base.address || profile.address || prev.address || "",
-        maritalStatus: (base.maritalStatus ||
-          profile.maritalStatus ||
-          prev.maritalStatus ||
-          undefined) as WillTemplate["maritalStatus"],
-        spouseName: base.spouseName || profile.spouseName || prev.spouseName || "",
-      };
-    });
+    const refresh = () => {
+      setPeople(loadBeneficiaries());
+      const doc = getEffectiveWillDoc();
+      setPrimaryId(doc.executors?.primary?.personId || "");
+      setSubstituteId(doc.executors?.substitute_1?.personId || "");
+      setIssues(validateWill());
+      setTick((t) => t + 1);
+    };
+    refresh();
+    window.addEventListener("store-updated", refresh);
+    return () => window.removeEventListener("store-updated", refresh);
   }, []);
 
-  const steps = [
-    { number: 1, title: "About You", icon: User },
-    { number: 2, title: "Executors", icon: User },
-    { number: 3, title: "Beneficiaries", icon: Users },
-    { number: 4, title: "Specific Gifts", icon: Gift },
-    { number: 5, title: "Guardians", icon: Baby },
-    { number: 6, title: "Final Wishes & Review", icon: Heart },
+  const executors = people.filter((b) => b.role === "executor");
+  const doc = getEffectiveWillDoc();
+  void tick;
+
+  const refStore = () => {
+    setIssues(validateWill());
+    setTick((t) => t + 1);
+  };
+
+  const toRef = (id: string) => {
+    const p = people.find((x) => x.id === id);
+    return p ? { personId: p.id, full_name: p.name, relationship: p.relationship, residential_address: p.residentialAddress } : undefined;
+  };
+
+  const setExecutors = (primary: string, substitute: string) => {
+    setPrimaryId(primary);
+    setSubstituteId(substitute);
+    updateWillDoc({
+      executors: {
+        primary: toRef(primary),
+        substitute_1: toRef(substitute),
+        co_executors_act_jointly: true,
+      },
+    });
+    refStore();
+  };
+
+  const errors = issues.filter((i) => !i.ok && i.severity === "error");
+  const warnings = issues.filter((i) => !i.ok && i.severity === "warning");
+
+  const profile = loadProfile();
+  const residuaryShares = doc.residuary?.optionB?.shares ?? [];
+  const residuaryTotal = residuaryShares.reduce((s, x) => s + (x.share_percent || 0), 0);
+  const gifts = doc.specific_gifts ?? [];
+  const legacies = doc.cash_legacies ?? [];
+  const minorChildren = getMinorChildren().length;
+  const hasGuardian = !!doc.guardians?.primary?.full_name || people.some((p) => p.role === "guardian");
+
+  const summary: { label: string; value: string; ok: boolean; route: string }[] = [
+    { label: "About you (testator)", value: profile.fullName || "Incomplete", ok: !!profile.fullName, route: "/profile" },
+    { label: "Executor", value: doc.executors?.primary?.full_name || "Not appointed", ok: !!doc.executors?.primary?.full_name, route: "/people" },
+    { label: "Residuary estate", value: residuaryShares.length ? `${residuaryTotal}% allocated` : "Not set", ok: residuaryShares.length > 0 && residuaryTotal === 100, route: "/my-estate/residuary" },
+    { label: "Specific gifts", value: gifts.length ? `${gifts.length} gift${gifts.length === 1 ? "" : "s"}` : "None", ok: true, route: "/my-estate/gifts" },
+    { label: "Cash legacies", value: legacies.length ? `${fmtAUD(legacies.reduce((s, l) => s + (l.amount_aud || 0), 0))}` : "None", ok: true, route: "/my-estate/legacies" },
+    ...(minorChildren > 0
+      ? [{ label: "Guardian (minor children)", value: hasGuardian ? "Appointed" : "Required", ok: hasGuardian, route: "/my-estate/wishes" }]
+      : []),
+    { label: "Funeral wishes", value: doc.funeral?.disposition && doc.funeral.disposition !== "no_preference" ? doc.funeral.disposition : "No preference", ok: true, route: "/my-estate/wishes" },
   ];
 
-  const updateWillData = (field: string, value: any) => {
-    setWillData((prev) => ({
-      ...prev,
-      [field]: value,
-      lastModified: new Date().toISOString(),
-    }));
-  };
-
-  const handleNext = () => {
-    if (currentStep < 6) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const handleGenerateWill = () => {
+  const handleGenerate = () => {
     const now = new Date().toISOString();
-
-    // Persist through the unified will record so the readiness score, the Will
-    // page, and the dashboard all recognise it; mirror into the vault like
-    // uploads do so it's captured in the inventory too.
-    saveWill({
-      status: "generated",
-      source: "template",
-      template: { ...willData, status: "generated", generatedAt: now },
-      generatedAt: now,
-    });
+    saveWill({ status: "generated", source: "template", generatedAt: now });
     mirrorWillToVault({ fileName: "Created from template" });
-
-    // Write the identity fields back to the shared profile so they stay in sync.
-    saveProfile({
-      fullName: willData.fullName,
-      dateOfBirth: willData.dateOfBirth,
-      address: willData.address,
-      maritalStatus: willData.maritalStatus,
-      spouseName: willData.spouseName,
-    });
-
-    logActivity("Will Generated", "will", "Generated will from template", {
-      field: "Will",
-      newValue: "Generated",
-    });
-
+    logActivity("Will Generated", "will", "Generated will from estate details");
     toast("Will generated and saved to your account");
     router.push("/will");
   };
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <Header
-        title="Create Will from Template"
-        subtitle={`Step ${currentStep} of 6: ${steps[currentStep - 1].title}`}
-      />
+      <Header title="Review &amp; Generate Your Will" subtitle="Built from your estate details — review, then generate the document" />
       <div className="container mx-auto px-8 py-8 max-w-4xl">
-        {/* Legal Disclaimer */}
         <Card padding="sm" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--warning)" }}>
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 flex-shrink-0" style={{ color: "var(--warning)" }} />
             <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              <strong>Legal Disclaimer:</strong> This template is for informational purposes only.
-              Have a qualified attorney review your will before signing.
+              <strong>Legal Disclaimer:</strong> Informational only. Have a qualified NSW solicitor review your will before signing.
             </p>
           </div>
         </Card>
 
-        {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
-              const isComplete = step.number < currentStep;
-              const isCurrent = step.number === currentStep;
+        {/* Validation issues */}
+        {(errors.length > 0 || warnings.length > 0) && (
+          <Card padding="md" className="mb-6 border-l-4" style={{ borderLeftColor: errors.length ? "var(--error)" : "var(--warning)" }}>
+            <h3 className="font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Before you generate</h3>
+            <ul className="space-y-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+              {errors.map((e) => (
+                <li key={e.id}>• {e.message}</li>
+              ))}
+              {warnings.map((w) => (
+                <li key={w.id} style={{ color: "var(--text-muted)" }}>• {w.message}</li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
-              return (
-                <div key={step.number} className="flex items-center flex-1">
-                  <div className="flex flex-col items-center flex-1">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        isComplete
-                          ? "bg-success"
-                          : isCurrent
-                          ? "bg-accent"
-                          : "bg-border"
-                      }`}
-                      style={{
-                        backgroundColor: isComplete
-                          ? "var(--success)"
-                          : isCurrent
-                          ? "var(--accent)"
-                          : "var(--border)",
-                        color: isComplete || isCurrent ? "var(--text-inverse)" : "var(--text-muted)",
-                      }}
-                    >
-                      {isComplete ? (
-                        <CheckCircle className="h-5 w-5" />
-                      ) : (
-                        <Icon className="h-5 w-5" />
-                      )}
-                    </div>
-                    <p
-                      className={`text-xs mt-2 text-center ${
-                        isCurrent ? "font-semibold" : ""
-                      }`}
-                      style={{
-                        color: isCurrent ? "var(--text-primary)" : "var(--text-secondary)",
-                      }}
-                    >
-                      {step.title}
-                    </p>
-                  </div>
-                  {index < steps.length - 1 && (
-                    <div
-                      className="h-0.5 flex-1 -mt-8"
-                      style={{
-                        backgroundColor: isComplete ? "var(--success)" : "var(--border)",
-                      }}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step Content */}
+        {/* Executors — the one will-specific choice (who is primary vs substitute) */}
         <Card padding="lg" className="mb-6">
-          {/* Step 1: About You — read-only, sourced from your profile (no re-entry) */}
-          {currentStep === 1 && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-                    About You
-                  </h3>
-                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                    Pulled from your profile — entered once, no need to re-type it here.
-                  </p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => router.push("/profile")}>
-                  Edit in Profile
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
-                <Detail label="Full legal name" value={willData.fullName} />
-                <Detail label="Date of birth" value={willData.dateOfBirth} />
-                <Detail label="Address" value={willData.address} />
-                <Detail label="Marital status" value={willData.maritalStatus} />
-                {willData.maritalStatus === "married" && <Detail label="Spouse" value={willData.spouseName} />}
-              </div>
-
-              {!willData.fullName && (
-                <p className="text-sm" style={{ color: "var(--warning)" }}>
-                  Your profile is incomplete — add your details in My Estate → You first.
-                </p>
-              )}
+          <div className="flex items-center gap-3 mb-4">
+            <Shield className="h-6 w-6" style={{ color: "var(--accent)" }} />
+            <div>
+              <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Executor &amp; Trustee</h3>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Who administers your estate (also acts as Trustee).</p>
             </div>
-          )}
-
-          {/* Step 2: Executors */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
+          </div>
+          {executors.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--warning)" }}>
+              No executors yet. Add a person with the Executor role on the{" "}
+              <button onClick={() => router.push("/people")} className="underline" style={{ color: "var(--accent)" }}>People</button> page.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-                  Executor &amp; Trustee
-                </h3>
-                <p className="text-sm mb-2" style={{ color: "var(--text-secondary)" }}>
-                  Your executor manages your estate and carries out your wishes. Under a NSW will the
-                  same person also acts as your <strong>Trustee</strong> (the Trustee Powers in the
-                  document are granted to them).
-                </p>
-                <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-                  People are managed on the{" "}
-                  <button
-                    type="button"
-                    onClick={() => router.push("/people")}
-                    className="underline"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    People
-                  </button>{" "}
-                  page. (A separate trustee for a testamentary trust is set up in Schedule 3.)
-                </p>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                      Primary Executor <span style={{ color: "var(--error)" }}>*</span>
-                    </label>
-                    <select
-                      className="input"
-                      value={willData.primaryExecutorId || ""}
-                      onChange={(e) => updateWillData("primaryExecutorId", e.target.value)}
-                    >
-                      <option value="">Select from beneficiaries...</option>
-                      {beneficiaries.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}{b.relationship ? ` (${b.relationship})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                      Alternate Executor (Optional)
-                    </label>
-                    <select
-                      className="input"
-                      value={willData.alternateExecutorId || ""}
-                      onChange={(e) => updateWillData("alternateExecutorId", e.target.value)}
-                    >
-                      <option value="">Select from beneficiaries...</option>
-                      {beneficiaries.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}{b.relationship ? ` (${b.relationship})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                      If your primary executor cannot serve, this person will take over
-                    </p>
-                  </div>
-                </div>
+                <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Primary Executor</label>
+                <select className="input w-full" value={primaryId} onChange={(e) => setExecutors(e.target.value, substituteId)}>
+                  <option value="">Select…</option>
+                  {executors.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               </div>
-            </div>
-          )}
-
-          {/* Step 3: Beneficiaries */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-                  Residuary Estate Distribution
-                </h3>
-                <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                  Your "residuary estate" is everything not specifically gifted. Allocate percentages to beneficiaries (must total 100%).
-                </p>
-                <div className="space-y-3">
-                  {beneficiaries.length === 0 && (
-                    <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                      No beneficiaries yet — add them on the Beneficiaries page first.
-                    </p>
-                  )}
-                  {beneficiaries.map((b) => (
-                    <div key={b.id} className="p-4 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                          {b.name}{b.relationship ? ` (${b.relationship})` : ""}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            className="input w-20 text-center"
-                            placeholder="0"
-                            min="0"
-                            max="100"
-                          />
-                          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>%</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <Button variant="ghost" size="sm" disabled title="Manage beneficiaries on the Beneficiaries page">
-                    + Add Beneficiary
-                  </Button>
-                </div>
-                <div className="mt-4 p-3 rounded-lg" style={{ backgroundColor: "var(--warning-bg)" }}>
-                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                    Total: <strong>0%</strong> (must equal 100%)
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Specific Gifts */}
-          {currentStep === 4 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-                  Specific Bequests
-                </h3>
-                <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                  Gift specific assets from your Vault to particular beneficiaries.
-                </p>
-                <div
-                  className="text-center py-12 rounded-lg"
-                  style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border)" }}
-                >
-                  <Gift className="h-12 w-12 mx-auto mb-4" style={{ color: "var(--text-muted)" }} />
-                  <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                    No specific gifts added yet
-                  </p>
-                  <Button variant="primary" disabled>
-                    + Add Gift from Vault
-                    <ComingSoon />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 5: Guardians */}
-          {currentStep === 5 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-4" style={{ color: "var(--text-primary)" }}>
-                  Guardian for Minor Children
-                </h3>
-                <div className="mb-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={willData.hasMinorChildren || false}
-                      onChange={(e) => updateWillData("hasMinorChildren", e.target.checked)}
-                    />
-                    <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                      I have children under 18 years old
-                    </span>
-                  </label>
-                </div>
-                {willData.hasMinorChildren && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                        Guardian Name <span style={{ color: "var(--error)" }}>*</span>
-                      </label>
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Full name"
-                        value={willData.guardianName || ""}
-                        onChange={(e) => updateWillData("guardianName", e.target.value)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                          Relationship
-                        </label>
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="e.g., Sister, Brother"
-                          value={willData.guardianRelationship || ""}
-                          onChange={(e) => updateWillData("guardianRelationship", e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                          Address
-                        </label>
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="Guardian's address"
-                          value={willData.guardianAddress || ""}
-                          onChange={(e) => updateWillData("guardianAddress", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-                      <p className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
-                        Alternate Guardian (Optional)
-                      </p>
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Alternate guardian name"
-                        value={willData.alternateGuardianName || ""}
-                        onChange={(e) => updateWillData("alternateGuardianName", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Step 6: Final Wishes & Review */}
-          {currentStep === 6 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-4" style={{ color: "var(--text-primary)" }}>
-                  Final Wishes & Review
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                      Funeral Preference
-                    </label>
-                    <select
-                      className="input"
-                      value={willData.funeralPreference || "no_preference"}
-                      onChange={(e) => updateWillData("funeralPreference", e.target.value)}
-                    >
-                      <option value="no_preference">No Preference</option>
-                      <option value="burial">Burial</option>
-                      <option value="cremation">Cremation</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                      Special Instructions
-                    </label>
-                    <textarea
-                      className="input"
-                      rows={4}
-                      placeholder="Any other instructions or wishes..."
-                      value={willData.specialInstructions || ""}
-                      onChange={(e) => updateWillData("specialInstructions", e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="mt-6 p-4 rounded-lg" style={{ backgroundColor: "var(--info-bg)" }}>
-                  <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                    <strong>What happens next:</strong>
-                  </p>
-                  <ol className="text-sm space-y-2" style={{ color: "var(--text-secondary)" }}>
-                    <li>1. We'll generate a PDF of your will</li>
-                    <li>2. Review and download the document</li>
-                    <li>3. Print and sign with 2 witnesses</li>
-                    <li>4. Store the original safely and record its location</li>
-                  </ol>
-                </div>
+                <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Substitute Executor</label>
+                <select className="input w-full" value={substituteId} onChange={(e) => setExecutors(primaryId, e.target.value)}>
+                  <option value="">Select…</option>
+                  {executors.filter((p) => p.id !== primaryId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               </div>
             </div>
           )}
         </Card>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between">
-          <Button
-            variant="secondary"
-            onClick={handleBack}
-            disabled={currentStep === 1}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
+        {/* Summary checklist */}
+        <Card padding="lg" className="mb-6">
+          <h3 className="text-lg font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Your will at a glance</h3>
+          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {summary.map((row) => (
+              <button
+                key={row.label}
+                onClick={() => router.push(row.route)}
+                className="w-full flex items-center justify-between gap-3 py-3 text-left transition-colors hover:bg-accent-muted/30 rounded px-2"
+              >
+                <div className="flex items-center gap-3">
+                  {row.ok ? (
+                    <CheckCircle className="h-5 w-5 flex-shrink-0" style={{ color: "var(--success)" }} />
+                  ) : (
+                    <span className="h-4 w-4 rounded-full border flex-shrink-0" style={{ borderColor: "var(--warning)" }} />
+                  )}
+                  <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm" style={{ color: "var(--text-muted)" }}>{row.value}</span>
+                  <ArrowRight className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        {/* Actions */}
+        <div className="flex items-center justify-between gap-3">
+          <Button variant="secondary" onClick={() => setPreviewText(renderWillText())}>
+            <FileText className="h-4 w-4" />
+            Preview document
           </Button>
-          {currentStep < 6 ? (
-            <Button variant="primary" onClick={handleNext}>
-              Next
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button variant="primary" onClick={handleGenerateWill}>
-              <FileText className="h-4 w-4" />
-              Generate Will
-            </Button>
-          )}
+          <Button variant="primary" onClick={handleGenerate}>
+            <CheckCircle className="h-4 w-4" />
+            Generate Will
+          </Button>
         </div>
       </div>
-    </div>
-  );
-}
 
-function Detail({ label, value }: { label: string; value?: string }) {
-  return (
-    <div>
-      <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </p>
-      <p className="text-sm font-medium capitalize" style={{ color: "var(--text-primary)" }}>
-        {value || "—"}
-      </p>
+      {/* Preview modal */}
+      {previewText !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card padding="lg" className="max-w-3xl w-full max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Will preview</h3>
+              <button onClick={() => setPreviewText(null)} aria-label="Close" className="p-1 rounded-md hover:bg-accent-muted/40" style={{ color: "var(--text-muted)" }}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <pre className="overflow-auto text-xs whitespace-pre-wrap flex-1 p-4 rounded-lg" style={{ backgroundColor: "var(--bg-surface)", color: "var(--text-secondary)", fontFamily: "ui-monospace, monospace" }}>
+              {previewText}
+            </pre>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

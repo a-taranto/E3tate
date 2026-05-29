@@ -324,3 +324,25 @@ export function getWillRender(): WillRender {
 export function includedClauses(r: WillRender): WillClause[] {
   return r.clauses.filter((c) => !c.optional || c.complete);
 }
+
+// Flatten the structured render to a plain-text document (for the preview modal).
+export function renderWillText(): string {
+  const r = getWillRender();
+  const out: string[] = [
+    "LAST WILL AND TESTAMENT",
+    `of ${r.testator.name}, of ${r.testator.address}`,
+    `Born ${r.testator.dob} · ${r.testator.occupation}`,
+    "",
+  ];
+  includedClauses(r).forEach((c, i) => {
+    out.push(`${i + 1}. ${c.heading.toUpperCase()}`, ...c.lines, "");
+  });
+  out.push(
+    "EXECUTION",
+    `Testator: ${r.testator.name}   Date: ${r.execution.date}   Place: ${r.execution.city}`,
+    `Witness 1: ${r.execution.witness1}   Witness 2: ${r.execution.witness2}`,
+    "",
+    "Governed by the laws of New South Wales, Australia. Have a solicitor review before signing."
+  );
+  return out.join("\n");
+}

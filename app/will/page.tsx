@@ -31,19 +31,19 @@ import { getWillRender, includedClauses, type WillRender } from "@/lib/willRende
 import { downloadWillPdf } from "@/lib/willPdf";
 
 // Each will clause links to where its content is provided/edited — the relevant
-// My Estate section, or the will wizard step for will-specific choices.
+// My Estate disposition view, People, or the Vault inventory.
 // (revocation / trustee-powers / general-provisions are boilerplate — no edit.)
 const CLAUSE_EDIT: Record<string, string> = {
   executor: "/people",
   "trustee-powers": "/people",
-  residuary: "/will/create?step=3",
-  "specific-gifts": "/my-estate/assets",
-  "cash-legacies": "/will/create?step=3",
-  guardian: "/will/create?step=5",
-  investments: "/my-estate/assets",
-  "family-home": "/my-estate/assets",
-  "digital-assets": "/my-estate/online",
-  funeral: "/will/create?step=6",
+  residuary: "/my-estate/residuary",
+  "specific-gifts": "/my-estate/gifts",
+  "cash-legacies": "/my-estate/legacies",
+  guardian: "/my-estate/wishes",
+  investments: "/vault/assets",
+  "family-home": "/vault/assets",
+  "digital-assets": "/my-estate/digital",
+  funeral: "/my-estate/wishes",
 };
 
 export default function WillPage() {
