@@ -40,6 +40,7 @@ const CLAUSE_EDIT: Record<string, string> = {
   executor: "/people",
   "trustee-powers": "/people",
   residuary: "/my-estate/residuary",
+  "testamentary-trust": "/my-estate/trust",
   "specific-gifts": "/my-estate/gifts",
   "cash-legacies": "/my-estate/legacies",
   guardian: "/my-estate/wishes",
