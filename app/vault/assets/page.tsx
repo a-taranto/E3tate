@@ -307,15 +307,6 @@ export default function SetupAssetsPage() {
     setAssets(loadAssets());
   };
 
-  const handleContinue = () => {
-    const completedSteps = JSON.parse(localStorage.getItem("setup_completed_steps") || "[]");
-    if (!completedSteps.includes("assets")) {
-      completedSteps.push("assets");
-      localStorage.setItem("setup_completed_steps", JSON.stringify(completedSteps));
-    }
-    router.push("/my-estate/liabilities");
-  };
-
   const toggleBeneficiary = (beneficiaryId: string) => {
     setFormData((prev) => {
       const assigned = prev.beneficiaryIds?.includes(beneficiaryId);

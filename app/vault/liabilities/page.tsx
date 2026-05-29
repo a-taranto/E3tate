@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
 import { Landmark, Plus, Trash2, ArrowRight, ArrowLeft } from "lucide-react";
 import {
@@ -24,7 +23,6 @@ const formatMoney = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
 
 export default function SetupLiabilitiesPage() {
-  const router = useRouter();
   const [liabilities, setLiabilities] = useState<EstateLiability[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ kind: "loan" as LiabilityKind, name: "", lender: "", balance: "" });
@@ -53,15 +51,6 @@ export default function SetupLiabilitiesPage() {
   const remove = (id: string) => {
     deleteLiability(id);
     setLiabilities(loadLiabilities());
-  };
-
-  const handleContinue = () => {
-    const completedSteps = JSON.parse(localStorage.getItem("setup_completed_steps") || "[]");
-    if (!completedSteps.includes("liabilities")) {
-      completedSteps.push("liabilities");
-      localStorage.setItem("setup_completed_steps", JSON.stringify(completedSteps));
-    }
-    router.push("/my-estate/will");
   };
 
   return (
