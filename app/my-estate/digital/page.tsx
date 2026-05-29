@@ -2,22 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Header from "@/components/layout/Header";
 import { Card, Button } from "@/components/ui";
-import {
-  Globe,
-  Download,
-  ArrowRight,
-  Landmark,
-  Bitcoin,
-  Share2,
-  Globe2,
-  KeyRound,
-  Boxes,
-  Pencil,
-  Check,
-  X,
-} from "lucide-react";
-import { loadVaultRecords, type VaultRecord } from "@/lib/store";
+import { Globe, Download, ArrowRight, KeyRound, Bitcoin, Pencil, Check, X } from "lucide-react";
+import { loadVaultRecords, loadAssets, type VaultRecord, type EstateAsset } from "@/lib/store";
 import {
   loadDigitalRegister,
   saveDigitalRegister,
@@ -27,92 +15,20 @@ import {
 } from "@/lib/model/digitalRegister";
 import { scanForSecret } from "@/lib/model/secretGuard";
 import { downloadDigitalRegisterPdf } from "@/lib/annexures";
-import RegisterSection, { type FieldDef, type RegisterItem } from "@/components/digital/RegisterSection";
 
 const fmtAUD = (n: number) =>
   n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
 
-const genId = () => `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-
-// Array sections of the register, declaratively. Keys/labels mirror the model
-// (digitalRegister.ts). Location/secret fields are flagged secretGuarded.
-const TWO_FA_OPTS = [
-  { value: "authenticator_app", label: "Authenticator app" },
-  { value: "sms", label: "SMS" },
-  { value: "hardware_key", label: "Hardware key" },
-  { value: "email", label: "Email" },
-  { value: "none", label: "None" },
-];
-
-const FINANCIAL_FIELDS: FieldDef[] = [
-  { key: "platform", label: "Platform / institution", required: true, half: true, placeholder: "e.g. CommBank NetBank" },
-  { key: "account_type", label: "Account type", half: true, placeholder: "e.g. Everyday, Savings" },
-  { key: "username_email", label: "Login email / username", half: true },
-  { key: "twofa_method", label: "Two-factor method", type: "select", options: TWO_FA_OPTS, half: true },
-  { key: "access_instructions_location", label: "Where access details are kept (location only)", secretGuarded: true, placeholder: "e.g. E3tate Vault" },
-];
-
-const CRYPTO_FIELDS: FieldDef[] = [
-  { key: "asset_type", label: "Asset", required: true, half: true, placeholder: "e.g. BTC, ETH" },
-  { key: "exchange_wallet", label: "Exchange / wallet", half: true, placeholder: "e.g. Coinbase, Ledger" },
-  { key: "approx_value_aud", label: "Approx. value (AUD)", type: "number", half: true },
-  { key: "seed_phrase_key_location", label: "Where the seed phrase / key is kept (location only)", secretGuarded: true, placeholder: "e.g. Vault, safe deposit box" },
-  { key: "notes", label: "Notes", type: "textarea" },
-];
-
-const SOCIAL_FIELDS: FieldDef[] = [
-  { key: "platform", label: "Platform", required: true, half: true, placeholder: "e.g. Instagram" },
-  { key: "username_profile_url", label: "Username / profile URL", half: true },
-  {
-    key: "instruction",
-    label: "On my death",
-    type: "select",
-    required: true,
-    half: true,
-    options: [
-      { value: "close", label: "Close the account" },
-      { value: "memorialise", label: "Memorialise" },
-      { value: "transfer", label: "Transfer to someone" },
-    ],
-  },
-  { key: "authorised_person_notes", label: "Notes (who handles this)", type: "textarea" },
-];
-
-const DOMAIN_FIELDS: FieldDef[] = [
-  { key: "asset", label: "Domain / IP asset", required: true, half: true, placeholder: "e.g. mysite.com" },
-  { key: "registrar_platform", label: "Registrar / platform", half: true, placeholder: "e.g. GoDaddy" },
-  { key: "approx_value_aud", label: "Approx. value (AUD)", type: "number", half: true },
-  { key: "renewal_date", label: "Renewal date", half: true, placeholder: "e.g. 2026-09-01" },
-  { key: "instructions_for_executor", label: "Instructions for executor", type: "textarea" },
-];
-
-const OTHER_FIELDS: FieldDef[] = [
-  { key: "asset_description", label: "Asset", required: true, half: true, placeholder: "e.g. Qantas points, NFT" },
-  { key: "platform_provider", label: "Platform / provider", half: true },
-  {
-    key: "category",
-    label: "Category",
-    type: "select",
-    half: true,
-    options: [
-      { value: "loyalty_program", label: "Loyalty program" },
-      { value: "digital_content", label: "Digital content" },
-      { value: "gaming", label: "Gaming" },
-      { value: "nft", label: "NFT" },
-      { value: "cloud_storage", label: "Cloud storage" },
-      { value: "email", label: "Email" },
-      { value: "online_business", label: "Online business" },
-      { value: "other", label: "Other" },
-    ],
-  },
-  { key: "approx_value_or_points", label: "Approx. value or points", half: true },
-  { key: "instructions", label: "Instructions", type: "textarea" },
-];
-
+// The Digital Asset Register is a COMPILED VIEW, not a separate place to type.
+// Online accounts come from Accounts & Online; digital assets of value come from
+// Assets; the only thing captured here is the password manager (the master key,
+// which isn't an account or an asset). This avoids duplicating the same item
+// across the Register, Accounts, and Assets.
 export default function DigitalRegisterPage() {
   const router = useRouter();
   const [reg, setReg] = useState<DigitalRegister | null>(null);
   const [accounts, setAccounts] = useState<VaultRecord[]>([]);
+  const [digitalAssets, setDigitalAssets] = useState<EstateAsset[]>([]);
   const [pmEditing, setPmEditing] = useState(false);
 
   useEffect(() => {
@@ -120,9 +36,10 @@ export default function DigitalRegisterPage() {
       setReg(loadDigitalRegister());
       setAccounts(
         loadVaultRecords().filter(
-          (r) => r.type === "accounts" || r.type === "credentials" || r.type === "wallets"
+          (r) => r.serviceId || r.type === "accounts" || r.type === "credentials" || r.type === "wallets"
         )
       );
+      setDigitalAssets(loadAssets().filter((a) => a.type === "digital" || a.type === "ip"));
     };
     refresh();
     window.addEventListener("store-updated", refresh);
@@ -131,172 +48,138 @@ export default function DigitalRegisterPage() {
 
   if (!reg) return null;
 
-  // CRUD: mutate the loaded register and persist (writeRaw dispatches
-  // store-updated, which re-runs refresh; we also setReg for immediacy).
-  const apply = (next: DigitalRegister) => {
-    saveDigitalRegister(next);
-    setReg(next);
-  };
-  type ArrayKey = "financial_accounts" | "crypto" | "social_media" | "domains_ip" | "other";
-  const addItem = (key: ArrayKey, item: Record<string, unknown>) =>
-    apply({ ...reg, [key]: [...reg[key], { ...item, id: genId() }] });
-  const updateItem = (key: ArrayKey, id: string, item: Record<string, unknown>) =>
-    apply({ ...reg, [key]: reg[key].map((x) => (x.id === id ? { ...x, ...item, id } : x)) });
-  const deleteItem = (key: ArrayKey, id: string) =>
-    apply({ ...reg, [key]: reg[key].filter((x) => x.id !== id) });
+  // Any legacy entries captured in the old editable register (kept visible, but
+  // capture now lives in Accounts & Online / Assets).
+  const legacy = [
+    ...reg.financial_accounts.map((x) => x.platform),
+    ...reg.crypto.map((x) => x.asset_type),
+    ...reg.social_media.map((x) => x.platform),
+    ...reg.domains_ip.map((x) => x.asset),
+    ...reg.other.map((x) => x.asset_description),
+  ].filter(Boolean);
 
-  const digitalValue = getDigitalAssetValue(reg);
+  const digitalValue = getDigitalAssetValue(reg) + digitalAssets.reduce((s, a) => s + (a.estimatedValue || 0), 0);
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>
-            Digital Asset Register
-          </h2>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            A record of your digital accounts and assets and how to access them. Download it as an{" "}
-            <strong>annexure</strong> to keep with your printed will so your executor can find and
-            deal with them.
-          </p>
-        </div>
-        <Button variant="primary" size="sm" onClick={downloadDigitalRegisterPdf} className="flex-shrink-0">
-          <Download className="h-4 w-4" />
-          Download PDF
-        </Button>
-      </div>
+      <Header
+        title="Digital Asset Register"
+        subtitle="A compiled record of your online accounts and digital assets, and how to access them — download it as an annexure to keep with your printed will."
+        action={
+          <Button variant="primary" size="sm" onClick={downloadDigitalRegisterPdf}>
+            <Download className="h-4 w-4" />
+            Download PDF
+          </Button>
+        }
+      />
 
-      {/* No-secrets reminder */}
+      {/* No-secrets reminder + where capture lives */}
       <Card padding="md" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--info)" }}>
         <div className="flex items-start gap-3">
           <KeyRound className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "var(--info)" }} />
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            This register never stores passwords, PINs, or seed phrases — only{" "}
-            <strong>where</strong> access lives. Your actual credentials belong in the{" "}
+            This register is compiled from your{" "}
             <button onClick={() => router.push("/vault/online")} className="underline" style={{ color: "var(--accent)" }}>
-              Vault
+              Accounts &amp; Online
+            </button>{" "}
+            and{" "}
+            <button onClick={() => router.push("/vault/assets")} className="underline" style={{ color: "var(--accent)" }}>
+              Assets
             </button>
-            .
+            . Add or edit items there — this page never stores passwords or seed phrases, only where access lives.
           </p>
         </div>
       </Card>
 
-      <RegisterSection
-        title="Online financial accounts"
-        icon={Landmark}
-        description="Banking, brokerage, and other money logins"
-        items={reg.financial_accounts as unknown as RegisterItem[]}
-        fields={FINANCIAL_FIELDS}
-        primaryKey="platform"
-        secondaryKeys={["account_type", "username_email"]}
-        addLabel="Add account"
-        onAdd={(i) => addItem("financial_accounts", i)}
-        onUpdate={(id, i) => updateItem("financial_accounts", id, i)}
-        onDelete={(id) => deleteItem("financial_accounts", id)}
-      />
+      {/* Online accounts (from Accounts & Online) */}
+      <Card padding="lg" className="mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Globe className="h-5 w-5" style={{ color: "var(--accent)" }} />
+            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
+              Online accounts {accounts.length > 0 && <span style={{ color: "var(--text-muted)" }}>({accounts.length})</span>}
+            </h3>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => router.push("/vault/online")}>
+            Manage <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+        {accounts.length === 0 ? (
+          <p className="text-sm py-1" style={{ color: "var(--text-muted)" }}>
+            No accounts yet — add them under Accounts &amp; Online.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {accounts.map((a) => (
+              <div key={a.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
+                <span className="text-sm" style={{ color: "var(--text-primary)" }}>{a.title}</span>
+                <span className="text-xs capitalize" style={{ color: "var(--text-muted)" }}>{a.subtype || a.type}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
-      <RegisterSection
-        title="Cryptocurrency"
-        icon={Bitcoin}
-        description="Holdings, exchanges, and wallets"
-        items={reg.crypto as unknown as RegisterItem[]}
-        fields={CRYPTO_FIELDS}
-        primaryKey="asset_type"
-        secondaryKeys={["exchange_wallet"]}
-        addLabel="Add crypto"
-        onAdd={(i) => addItem("crypto", i)}
-        onUpdate={(id, i) => updateItem("crypto", id, i)}
-        onDelete={(id) => deleteItem("crypto", id)}
-      />
+      {/* Digital assets of value (from Assets) */}
+      <Card padding="lg" className="mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Bitcoin className="h-5 w-5" style={{ color: "var(--accent)" }} />
+            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
+              Crypto &amp; digital assets {digitalAssets.length > 0 && <span style={{ color: "var(--text-muted)" }}>({digitalAssets.length})</span>}
+            </h3>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => router.push("/vault/assets")}>
+            Manage <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+        {digitalAssets.length === 0 ? (
+          <p className="text-sm py-1" style={{ color: "var(--text-muted)" }}>
+            No digital assets of value yet — add crypto or IP under Assets.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {digitalAssets.map((a) => (
+              <div key={a.id} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: "var(--bg-surface)" }}>
+                <span className="text-sm" style={{ color: "var(--text-primary)" }}>{a.title}</span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{a.estimatedValue != null ? fmtAUD(a.estimatedValue) : "—"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {digitalValue > 0 && (
+          <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
+            Digital assets of value: <strong>{fmtAUD(digitalValue)}</strong> (counted in your net estate via Assets).
+          </p>
+        )}
+      </Card>
 
-      <RegisterSection
-        title="Social media & online accounts"
-        icon={Share2}
-        description="What should happen to each on your death"
-        items={reg.social_media as unknown as RegisterItem[]}
-        fields={SOCIAL_FIELDS}
-        primaryKey="platform"
-        secondaryKeys={["instruction"]}
-        addLabel="Add account"
-        onAdd={(i) => addItem("social_media", i)}
-        onUpdate={(id, i) => updateItem("social_media", id, i)}
-        onDelete={(id) => deleteItem("social_media", id)}
-      />
-
-      <RegisterSection
-        title="Domains, websites & IP"
-        icon={Globe2}
-        description="Domains, sites, and intellectual property"
-        items={reg.domains_ip as unknown as RegisterItem[]}
-        fields={DOMAIN_FIELDS}
-        primaryKey="asset"
-        secondaryKeys={["registrar_platform"]}
-        addLabel="Add domain"
-        onAdd={(i) => addItem("domains_ip", i)}
-        onUpdate={(id, i) => updateItem("domains_ip", id, i)}
-        onDelete={(id) => deleteItem("domains_ip", id)}
-      />
-
-      <RegisterSection
-        title="Other digital assets"
-        icon={Boxes}
-        description="Loyalty points, gaming, content, and more"
-        items={reg.other as unknown as RegisterItem[]}
-        fields={OTHER_FIELDS}
-        primaryKey="asset_description"
-        secondaryKeys={["platform_provider", "approx_value_or_points"]}
-        addLabel="Add asset"
-        onAdd={(i) => addItem("other", i)}
-        onUpdate={(id, i) => updateItem("other", id, i)}
-        onDelete={(id) => deleteItem("other", id)}
-      />
-
+      {/* Password manager — the one thing captured here (the master key) */}
       <PasswordManagerCard
         value={reg.password_manager}
         editing={pmEditing}
         setEditing={setPmEditing}
         onSave={(pm) => {
-          apply({ ...reg, password_manager: pm });
+          saveDigitalRegister({ ...reg, password_manager: pm });
+          setReg(loadDigitalRegister());
           setPmEditing(false);
         }}
       />
 
-      {digitalValue > 0 && (
-        <p className="text-xs mt-2 mb-6" style={{ color: "var(--text-muted)" }}>
-          Approx. value of holdings recorded here: <strong>{fmtAUD(digitalValue)}</strong>. This is a
-          reference for your executor — to count a holding toward your net estate, also add it under{" "}
-          <button onClick={() => router.push("/vault/assets")} className="underline" style={{ color: "var(--accent)" }}>
-            Assets
-          </button>
-          .
-        </p>
-      )}
-
-      {/* Online accounts captured via the Vault service flow (read-only here). */}
-      {accounts.length > 0 && (
-        <Card padding="lg" className="mt-2">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
-              From your Vault accounts
-            </h3>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/vault/online")}>
-              Manage <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="space-y-2">
-            {accounts.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center justify-between p-2 rounded-lg"
-                style={{ backgroundColor: "var(--bg-surface)" }}
-              >
-                <span className="text-sm" style={{ color: "var(--text-primary)" }}>
-                  {a.title}
-                </span>
-                <span className="text-xs capitalize" style={{ color: "var(--text-muted)" }}>
-                  {a.subtype || a.type}
-                </span>
-              </div>
+      {/* Legacy register entries, if any were captured in the old editor */}
+      {legacy.length > 0 && (
+        <Card padding="md" className="mb-4 border-l-4" style={{ borderLeftColor: "var(--warning)" }}>
+          <p className="text-sm mb-1" style={{ color: "var(--text-primary)" }}>
+            Earlier register entries
+          </p>
+          <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+            These were added in the old register. Re-add them under Accounts &amp; Online or Assets so they stay in one place.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {legacy.map((l, i) => (
+              <span key={i} className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "var(--bg-surface)", color: "var(--text-secondary)" }}>
+                {l}
+              </span>
             ))}
           </div>
         </Card>
@@ -306,7 +189,7 @@ export default function DigitalRegisterPage() {
 }
 
 // Password manager is a single record (the master key to everything), so it gets
-// a dedicated inline form rather than the list editor.
+// a dedicated inline form. It's the only item the register captures directly.
 function PasswordManagerCard({
   value,
   editing,
@@ -369,28 +252,20 @@ function PasswordManagerCard({
         <div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-                Application
-              </label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Application</label>
               <input className="input w-full" placeholder="e.g. 1Password" value={form.application || ""} onChange={(e) => set("application", e.target.value)} />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-                Account email / username
-              </label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Account email / username</label>
               <input className="input w-full" value={form.email_username || ""} onChange={(e) => set("email_username", e.target.value)} />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-                Where the master password is kept (location only)
-              </label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Where the master password is kept (location only)</label>
               <input className={`input w-full${error ? " border-red-400" : ""}`} placeholder="e.g. Sealed letter with solicitor" value={form.master_password_location || ""} onChange={(e) => set("master_password_location", e.target.value)} />
               {error && <p className="text-xs mt-1" style={{ color: "var(--error)" }}>{error}</p>}
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-                Recovery / emergency access
-              </label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Recovery / emergency access</label>
               <textarea className="input w-full" rows={2} value={form.recovery_emergency_access || ""} onChange={(e) => set("recovery_emergency_access", e.target.value)} />
             </div>
           </div>
@@ -407,17 +282,13 @@ function PasswordManagerCard({
         </div>
       ) : isSet ? (
         <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: "var(--bg-surface)" }}>
-          <p className="font-medium" style={{ color: "var(--text-primary)" }}>
-            {value.application || "Password manager"}
-          </p>
+          <p className="font-medium" style={{ color: "var(--text-primary)" }}>{value.application || "Password manager"}</p>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             {[value.email_username, value.master_password_location].filter(Boolean).join(" · ") || "—"}
           </p>
         </div>
       ) : (
-        <p className="text-sm py-1" style={{ color: "var(--text-muted)" }}>
-          Not recorded yet.
-        </p>
+        <p className="text-sm py-1" style={{ color: "var(--text-muted)" }}>Not recorded yet.</p>
       )}
     </Card>
   );
