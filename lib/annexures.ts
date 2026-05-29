@@ -349,6 +349,7 @@ function digitalAccountDetail(r: VaultRecord): string {
 export async function downloadDigitalRegisterPdf(): Promise<void> {
   const records = loadVaultRecords().filter((r) => r.serviceId || r.subtype);
   const reg = loadDigitalRegister();
+  const assets = loadAssets(); // crypto/IP of value are captured as Assets now
   const byCat = (cats: string[]) => records.filter((r) => cats.includes(r.subtype || ""));
 
   const accessNote = "Stored securely in the E3tate Vault";
@@ -364,8 +365,11 @@ export async function downloadDigitalRegisterPdf(): Promise<void> {
     ]),
   ];
 
-  // B — Cryptocurrency & digital assets of value
+  // B — Cryptocurrency & digital assets of value (held as Assets now)
   const cryptoRows: string[][] = [
+    ...assets
+      .filter((a) => a.type === "digital")
+      .map((a) => [a.title, a.institution || "—", a.estimatedValue != null ? fmtAUD(a.estimatedValue) : accessNote]),
     ...byCat(["crypto"]).map((r) => [r.title, digitalAccountDetail(r), accessNote]),
     ...reg.crypto.map((c) => [
       c.asset_type,
@@ -380,12 +384,17 @@ export async function downloadDigitalRegisterPdf(): Promise<void> {
     ...reg.social_media.map((s) => [s.platform, s.username_profile_url || "—", s.instruction]),
   ];
 
-  // D — Domains, websites & intellectual property
-  const domainRows: string[][] = reg.domains_ip.map((d) => [
-    d.asset,
-    d.registrar_platform || "—",
-    d.approx_value_aud ? fmtAUD(d.approx_value_aud) : "—",
-  ]);
+  // D — Domains, websites & intellectual property (IP held as Assets, plus register entries)
+  const domainRows: string[][] = [
+    ...assets
+      .filter((a) => a.type === "ip")
+      .map((a) => [a.title, a.institution || "—", a.estimatedValue != null ? fmtAUD(a.estimatedValue) : "—"]),
+    ...reg.domains_ip.map((d) => [
+      d.asset,
+      d.registrar_platform || "—",
+      d.approx_value_aud ? fmtAUD(d.approx_value_aud) : "—",
+    ]),
+  ];
 
   // E — Password manager
   const pm = reg.password_manager;
