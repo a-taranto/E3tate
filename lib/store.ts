@@ -71,6 +71,7 @@ export interface Beneficiary {
   status: BeneficiaryStatus;
   relationship?: string; // "Relationship to me" — used in the will document
   residentialAddress?: string; // used in the will for executors/guardians
+  dateOfBirth?: string; // for family members (children) — drives the guardian rule
   invitedDate?: string;
   recordsAccess?: number;
   scopeSummary?: string;
@@ -911,13 +912,80 @@ export function saveProfile(patch: Partial<Profile>): Profile {
   return next;
 }
 
+// Is this person a child of the testator (by relationship label)?
+export function isChildRelationship(relationship?: string): boolean {
+  const r = (relationship || "").toLowerCase();
+  return r.includes("child") || r === "son" || r === "daughter";
+}
+
 // Children under 18 — drives the guardian requirement (Part B Clause 4 /
-// validation `guardian_conditional`).
-export function getMinorChildren(): Dependent[] {
-  return (loadProfile().children ?? []).filter((c) => {
-    const age = ageFromDOB(c.dateOfBirth);
+// validation `guardian_conditional`). Reads from People (family members are
+// first-class persons with a dateOfBirth), not the profile.
+export function getMinorChildren(): Beneficiary[] {
+  return loadBeneficiaries().filter((b) => {
+    if (!isChildRelationship(b.relationship)) return false;
+    const age = ageFromDOB(b.dateOfBirth);
     return age !== undefined && age < 18;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Per-person record access (the disclosure-scope layer the People page edits).
+// A vault record is "disclosed" to a person when its `beneficiaries` array
+// contains the person's id, their name, or the "All Beneficiaries" token.
+// Executors implicitly access everything.
+// ---------------------------------------------------------------------------
+
+const ALL_BENEFICIARIES_TOKEN = "All Beneficiaries";
+
+export function recordDisclosedTo(record: VaultRecord, person: Beneficiary): boolean {
+  const tokens = record.beneficiaries || [];
+  return (
+    tokens.includes(person.id) ||
+    tokens.includes(person.name) ||
+    tokens.includes(ALL_BENEFICIARIES_TOKEN)
+  );
+}
+
+// The vault records a person can access.
+export function getRecordsForPerson(person: Beneficiary): VaultRecord[] {
+  const records = loadVaultRecords();
+  if (person.role === "executor") return records; // executors see everything
+  if (person.role === "contact") return []; // contacts have no record access
+  return records.filter((r) => recordDisclosedTo(r, person));
+}
+
+export interface PersonAccessSummary {
+  count: number;
+  scopeLabel: string;
+}
+
+export function getPersonAccess(person: Beneficiary): PersonAccessSummary {
+  if (person.role === "executor") {
+    return { count: loadVaultRecords().length, scopeLabel: "Full vault access + execution rights" };
+  }
+  if (person.role === "contact") {
+    return { count: 0, scopeLabel: "No record access" };
+  }
+  const count = getRecordsForPerson(person).length;
+  const scopeLabel =
+    person.role === "observer"
+      ? `Limited visibility · ${count} record${count === 1 ? "" : "s"}`
+      : `${count} record${count === 1 ? "" : "s"} disclosed`;
+  return { count, scopeLabel };
+}
+
+// Grant/revoke a person's access to a specific vault record (toggles their id
+// in the record's beneficiaries). No-op for executors (implicit full access).
+export function setRecordDisclosure(recordId: string, person: Beneficiary, disclosed: boolean): void {
+  const rec = loadVaultRecords().find((r) => r.id === recordId);
+  if (!rec) return;
+  const tokens = new Set(rec.beneficiaries || []);
+  // Normalise on the person's id as the canonical token.
+  tokens.delete(person.name);
+  if (disclosed) tokens.add(person.id);
+  else tokens.delete(person.id);
+  updateVaultRecord(recordId, { beneficiaries: Array.from(tokens) });
 }
 
 // ---------------------------------------------------------------------------

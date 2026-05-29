@@ -1,186 +1,91 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Card, Button } from "@/components/ui";
+import { X } from "lucide-react";
 import ServiceSelectionGrid from "@/components/setup/ServiceSelectionGrid";
 import ServiceSetupForm from "@/components/setup/ServiceSetupForm";
-import ServiceSetupSummary from "@/components/setup/ServiceSetupSummary";
 import { getServiceById } from "@/lib/services";
-import type { Beneficiary, VaultRecord } from "@/types";
+import { saveServiceToVault } from "@/lib/vaultUtils";
+import { loadBeneficiaries, type Beneficiary } from "@/lib/store";
 
 export default function SetupOnlinePage() {
-  const router = useRouter();
-  const [step, setStep] = useState<"select" | "setup" | "summary">("select");
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [currentServiceIndex, setCurrentServiceIndex] = useState(0);
+  // setupData keyed by serviceId is the source of truth for "configured" services.
   const [setupData, setSetupData] = useState<{ [serviceId: string]: any }>({});
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+  const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
 
-  // Load saved data
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedBeneficiaries = localStorage.getItem("setup_beneficiaries");
-      if (savedBeneficiaries) {
-        setBeneficiaries(JSON.parse(savedBeneficiaries));
-      }
-
-      const savedSelection = localStorage.getItem("setup_selected_services");
-      if (savedSelection) {
-        setSelectedServiceIds(JSON.parse(savedSelection));
-      }
-
-      const savedSetupData = localStorage.getItem("setup_service_data");
-      if (savedSetupData) {
-        setSetupData(JSON.parse(savedSetupData));
-      }
+    setBeneficiaries(loadBeneficiaries());
+    try {
+      const saved = localStorage.getItem("setup_service_data");
+      if (saved) setSetupData(JSON.parse(saved));
+    } catch {
+      /* ignore */
     }
   }, []);
 
-  const handleToggleService = (serviceId: string) => {
-    setSelectedServiceIds((prev) => {
-      const updated = prev.includes(serviceId)
-        ? prev.filter((id) => id !== serviceId)
-        : [...prev, serviceId];
+  const configuredIds = Object.keys(setupData);
+  const activeService = activeServiceId ? getServiceById(activeServiceId) : null;
 
-      localStorage.setItem("setup_selected_services", JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  const handleStartSetup = () => {
-    setStep("setup");
-    setCurrentServiceIndex(0);
-  };
-
-  const handleServiceSave = (formData: any) => {
-    const currentServiceId = selectedServiceIds[currentServiceIndex];
-    const updated = {
-      ...setupData,
-      [currentServiceId]: formData,
-    };
-    setSetupData(updated);
-    localStorage.setItem("setup_service_data", JSON.stringify(updated));
-
-    // Move to next service or finish
-    if (currentServiceIndex < selectedServiceIds.length - 1) {
-      setCurrentServiceIndex(currentServiceIndex + 1);
-    } else {
-      handleFinishSetup();
+  const persist = (next: { [serviceId: string]: any }) => {
+    setSetupData(next);
+    localStorage.setItem("setup_service_data", JSON.stringify(next));
+    // Keep the legacy selection key in sync with what's configured.
+    localStorage.setItem("setup_selected_services", JSON.stringify(Object.keys(next)));
+    // The Online section counts as done once at least one account is recorded.
+    const steps = JSON.parse(localStorage.getItem("setup_completed_steps") || "[]");
+    if (Object.keys(next).length > 0 && !steps.includes("online")) {
+      steps.push("online");
+      localStorage.setItem("setup_completed_steps", JSON.stringify(steps));
     }
   };
 
-  const handleServiceSkip = () => {
-    // Move to next service or finish
-    if (currentServiceIndex < selectedServiceIds.length - 1) {
-      setCurrentServiceIndex(currentServiceIndex + 1);
-    } else {
-      handleFinishSetup();
-    }
+  const handleSaveService = (formData: any) => {
+    if (!activeService) return;
+    persist({ ...setupData, [activeService.id]: formData });
+    // Create/update the linked Vault record so the account shows in the Vault.
+    saveServiceToVault(activeService, formData);
+    setActiveServiceId(null);
   };
 
-  const handleFinishSetup = () => {
-    // Mark step as complete
-    const completedSteps = JSON.parse(localStorage.getItem("setup_completed_steps") || "[]");
-    if (!completedSteps.includes("online")) {
-      completedSteps.push("online");
-      localStorage.setItem("setup_completed_steps", JSON.stringify(completedSteps));
-    }
-
-    // Show summary
-    setStep("summary");
-  };
-
-  const handleContinueToAssets = () => {
-    // Navigate to next step
-    router.push("/my-estate/assets");
-  };
-
-  const handleAddMoreServices = () => {
-    // Go back to selection
-    setStep("select");
-  };
-
-  const handleBack = () => {
-    if (step === "summary") {
-      // Can't go back from summary
-      return;
-    } else if (step === "setup" && currentServiceIndex > 0) {
-      setCurrentServiceIndex(currentServiceIndex - 1);
-    } else if (step === "setup") {
-      setStep("select");
-    } else {
-      router.push("/people");
-    }
-  };
-
-  const currentService = step === "setup" && selectedServiceIds[currentServiceIndex]
-    ? getServiceById(selectedServiceIds[currentServiceIndex])
-    : null;
+  const closeModal = () => setActiveServiceId(null);
 
   return (
     <div className="max-w-5xl mx-auto">
-      {step === "select" ? (
-        <>
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
-              Your online life
-            </h2>
-            <p className="text-lg" style={{ color: "var(--text-secondary)" }}>
-              Select the online services and accounts you use. We'll help you set up wishes for each one.
-            </p>
-          </div>
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
+          Your online life
+        </h2>
+        <p className="text-lg" style={{ color: "var(--text-secondary)" }}>
+          Click a service to record your account details and what should happen to it. Use{" "}
+          <strong>+ Add service</strong> in any category for anything not listed.
+        </p>
+      </div>
 
-          <ServiceSelectionGrid
-            selectedServiceIds={selectedServiceIds}
-            onToggleService={handleToggleService}
-            onContinue={selectedServiceIds.length > 0 ? handleStartSetup : handleFinishSetup}
-          />
+      <ServiceSelectionGrid configuredIds={configuredIds} onOpenService={setActiveServiceId} />
 
-          {/* Back button (fixed at bottom, left side) */}
-          <div className="fixed bottom-6 left-72 z-40">
-            <Button variant="ghost" onClick={() => router.push("/my-estate/people")}>
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-          </div>
-        </>
-      ) : step === "summary" ? (
-        <ServiceSetupSummary
-          serviceIds={selectedServiceIds}
-          setupData={setupData}
-          onContinue={handleContinueToAssets}
-          onAddMore={handleAddMoreServices}
-        />
-      ) : (
-        <>
-          {currentService && (
-            <>
-              <div className="mb-8">
-                <Button variant="ghost" size="sm" onClick={handleBack} className="mb-4">
-                  <ArrowLeft className="h-4 w-4" />
-                  {currentServiceIndex > 0 ? "Previous Service" : "Back to Selection"}
-                </Button>
-                <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
-                  Setup {currentService.name}
-                </h2>
-                <p className="text-lg" style={{ color: "var(--text-secondary)" }}>
-                  Tell us about your {currentService.name} account and what should happen to it.
-                </p>
-              </div>
-
-              <ServiceSetupForm
-                service={currentService}
-                beneficiaries={beneficiaries}
-                currentIndex={currentServiceIndex}
-                totalServices={selectedServiceIds.length}
-                onSave={handleServiceSave}
-                onSkip={handleServiceSkip}
-              />
-            </>
-          )}
-        </>
+      {/* Per-service details modal */}
+      {activeService && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <Card padding="lg" className="max-w-3xl w-full my-8 relative">
+            <button
+              onClick={closeModal}
+              className="absolute top-4 right-4 p-1 rounded-md transition-colors hover:bg-accent-muted/40"
+              style={{ color: "var(--text-muted)" }}
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <ServiceSetupForm
+              service={activeService}
+              beneficiaries={beneficiaries}
+              initialData={setupData[activeService.id]}
+              onSave={handleSaveService}
+              onSkip={closeModal}
+            />
+          </Card>
+        </div>
       )}
     </div>
   );

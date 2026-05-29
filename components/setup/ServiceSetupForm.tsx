@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ServiceDefinition } from "@/lib/services";
-import { Beneficiary } from "@/types";
+import { type Beneficiary } from "@/lib/store";
 import { Card, Button } from "@/components/ui";
 import {
   Eye,
@@ -40,8 +40,9 @@ interface ServiceFormData {
 interface ServiceSetupFormProps {
   service: ServiceDefinition;
   beneficiaries: Beneficiary[];
-  currentIndex: number;
-  totalServices: number;
+  currentIndex?: number;
+  totalServices?: number;
+  initialData?: ServiceFormData; // prefill when editing an already-set-up service
   onSave: (formData: ServiceFormData) => void;
   onSkip: () => void;
 }
@@ -49,16 +50,19 @@ interface ServiceSetupFormProps {
 export default function ServiceSetupForm({
   service,
   beneficiaries,
-  currentIndex,
-  totalServices,
+  currentIndex = 0,
+  totalServices = 1,
+  initialData,
   onSave,
   onSkip,
 }: ServiceSetupFormProps) {
-  const [formData, setFormData] = useState<ServiceFormData>({
-    accountDetails: {},
-    storeCredentials: true,
-    wishAction: service.defaultAction,
-  });
+  const [formData, setFormData] = useState<ServiceFormData>(
+    initialData ?? {
+      accountDetails: {},
+      storeCredentials: true,
+      wishAction: service.defaultAction,
+    }
+  );
 
   const [showPassword, setShowPassword] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -82,32 +86,34 @@ export default function ServiceSetupForm({
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Progress Indicator */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-            Setting up service {currentIndex + 1} of {totalServices}
-          </p>
-          <p className="text-sm font-medium" style={{ color: "var(--accent)" }}>
-            {Math.round(((currentIndex + 1) / totalServices) * 100)}%
-          </p>
+      {/* Progress Indicator — only when stepping through multiple services */}
+      {totalServices > 1 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+              Setting up service {currentIndex + 1} of {totalServices}
+            </p>
+            <p className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+              {Math.round(((currentIndex + 1) / totalServices) * 100)}%
+            </p>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden border" style={{ borderColor: "var(--border)" }}>
+            <div
+              className="h-full transition-all duration-300"
+              style={{
+                backgroundColor: "var(--accent)",
+                width: `${((currentIndex + 1) / totalServices) * 100}%`,
+              }}
+            />
+          </div>
         </div>
-        <div className="h-2 rounded-full overflow-hidden border" style={{ borderColor: "var(--border)" }}>
-          <div
-            className="h-full transition-all duration-300"
-            style={{
-              backgroundColor: "var(--accent)",
-              width: `${((currentIndex + 1) / totalServices) * 100}%`,
-            }}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Header */}
       <Card padding="lg" className="mb-6">
         <div className="flex items-start gap-4">
           <div className="w-20 h-20 flex items-center justify-center flex-shrink-0">
-            {!imageError ? (
+            {service.logo && !imageError ? (
               <img
                 src={service.logo}
                 alt={service.name}

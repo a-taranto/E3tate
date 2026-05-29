@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import { Card, Button } from "@/components/ui";
-import { User, MapPin, Calendar, Heart, Info, ScrollText, Baby, Plus, Trash2 } from "lucide-react";
-import { loadProfile, saveProfile, ageFromDOB, type Profile, type Dependent } from "@/lib/store";
+import { User, MapPin, Calendar, Heart, Info, ScrollText, Users } from "lucide-react";
+import { loadProfile, saveProfile, type Profile } from "@/lib/store";
 import { toast } from "@/components/ui/Toaster";
 
 const MARITAL_OPTIONS = [
@@ -31,17 +31,6 @@ export default function ProfilePage() {
 
   const update = (field: keyof Profile, value: string) =>
     setProfile((prev) => ({ ...prev, [field]: value }));
-
-  const children = profile.children ?? [];
-  const setChildren = (next: Dependent[]) => setProfile((p) => ({ ...p, children: next }));
-  const addChild = () => setChildren([...children, { id: Date.now().toString(), name: "", dateOfBirth: "" }]);
-  const updateChild = (id: string, field: "name" | "dateOfBirth", value: string) =>
-    setChildren(children.map((k) => (k.id === id ? { ...k, [field]: value } : k)));
-  const removeChild = (id: string) => setChildren(children.filter((k) => k.id !== id));
-  const hasMinor = children.some((k) => {
-    const a = ageFromDOB(k.dateOfBirth);
-    return a !== undefined && a < 18;
-  });
 
   const handleSave = () => {
     saveProfile(profile);
@@ -169,55 +158,18 @@ export default function ProfilePage() {
           </div>
         </Card>
 
-        {/* Children / Dependents */}
-        <Card padding="lg" className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Baby className="h-6 w-6" style={{ color: "var(--accent)" }} />
-            <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-              Children
-            </h3>
+        {/* Family note — children & spouse now live on the People page */}
+        <Card padding="md" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--info)" }}>
+          <div className="flex items-start gap-3">
+            <Users className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "var(--info)" }} />
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              Your spouse and children are managed on the{" "}
+              <button onClick={() => router.push("/people")} className="underline" style={{ color: "var(--accent)" }}>
+                People
+              </button>{" "}
+              page, where you can also assign them gifts. Children under 18 there drive the guardian requirement.
+            </p>
           </div>
-          <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-            Add your children. If any are under 18, your will should appoint a guardian.
-          </p>
-
-          <div className="space-y-3">
-            {children.map((child) => (
-              <div key={child.id} className="flex items-center gap-3">
-                <input
-                  type="text"
-                  className="input flex-1"
-                  placeholder="Child's full name"
-                  value={child.name}
-                  onChange={(e) => updateChild(child.id, "name", e.target.value)}
-                />
-                <input
-                  type="date"
-                  className="input"
-                  value={child.dateOfBirth || ""}
-                  onChange={(e) => updateChild(child.id, "dateOfBirth", e.target.value)}
-                />
-                <Button variant="ghost" size="sm" onClick={() => removeChild(child.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          <Button variant="ghost" size="sm" onClick={addChild} className="mt-3">
-            <Plus className="h-4 w-4" />
-            Add Child
-          </Button>
-
-          {hasMinor && (
-            <div className="mt-4 p-3 rounded-lg flex items-start gap-2" style={{ backgroundColor: "var(--warning-bg)" }}>
-              <Baby className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: "var(--warning)" }} />
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                You have a child under 18 — a <strong>Guardian</strong> is required. Add one on the People page with the
-                Guardian role, then appoint them in your will.
-              </p>
-            </div>
-          )}
         </Card>
 
         {/* Actions */}
