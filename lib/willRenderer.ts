@@ -250,8 +250,9 @@ function buildClauses(doc: WillDocument): WillClause[] {
   }
   clauses.push({ id: "funeral", heading: "Funeral and Burial Directions", optional: true, complete: funeralComplete, lines: funeralLines });
 
-  // Digital assets & records — companion (Schedule 4 / Vault). Not part of the
-  // will text; references where the executor finds digital access.
+  // Digital assets & records — references the Digital Assets Register (an
+  // annexure generated from the Vault and kept with the Will). Generic wording,
+  // no internal "Schedule" numbering.
   const vaultDigital = loadVaultRecords().filter(
     (r) => r.type === "wallets" || r.type === "credentials" || r.type === "accounts"
   ).length;
@@ -271,7 +272,7 @@ function buildClauses(doc: WillDocument): WillClause[] {
     lines:
       digitalCount > 0
         ? [
-            "My digital accounts, cryptocurrency, online services, and the means to access them are recorded in my Digital Assets Register (Schedule 4) and stored securely in my E3tate Vault.",
+            "My digital accounts, cryptocurrency, online services, and the means to access them are recorded in my Digital Assets Register, which is kept with this Will and stored securely in my E3tate Vault.",
             "This register does not form part of this Will and does not become public on probate. I direct my Executor to refer to it to identify, access, and deal with my digital assets in accordance with my recorded wishes.",
             `${digitalCount} digital record${digitalCount === 1 ? "" : "s"} ${digitalCount === 1 ? "is" : "are"} currently held in my Vault.`,
           ]

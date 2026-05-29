@@ -34,14 +34,14 @@ export default function EstatePositionSummary({ className = "" }: { className?: 
         <h3 className="font-medium text-lg" style={{ color: "var(--text-primary)" }}>
           Estate Value
         </h3>
-        <Button variant="ghost" size="sm" onClick={() => router.push("/my-estate/assets")}>
+        <Button variant="ghost" size="sm" onClick={() => router.push("/vault/assets")}>
           Manage Assets
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-stretch">
         <button
-          onClick={() => router.push("/my-estate/assets")}
+          onClick={() => router.push("/vault/assets")}
           className="text-left rounded-lg p-3 transition-colors hover:bg-accent-muted/50"
         >
           <p className="text-sm mb-1" style={{ color: "var(--text-muted)" }}>Assets</p>
@@ -50,7 +50,7 @@ export default function EstatePositionSummary({ className = "" }: { className?: 
           </p>
         </button>
         <button
-          onClick={() => router.push("/liabilities")}
+          onClick={() => router.push("/vault/liabilities")}
           className="text-left rounded-lg p-3 transition-colors hover:bg-accent-muted/50"
         >
           <p className="text-sm mb-1" style={{ color: "var(--text-muted)" }}>− Liabilities</p>

@@ -37,7 +37,6 @@ const navigation: NavNode[] = [
     href: "/vault",
     icon: Vault,
     children: [
-      { name: "Documents & Records", href: "/vault" },
       { name: "Assets", href: "/vault/assets" },
       { name: "Liabilities", href: "/vault/liabilities" },
       {
@@ -48,6 +47,7 @@ const navigation: NavNode[] = [
           href: `/vault/online#${c.id}`,
         })),
       },
+      { name: "Documents", href: "/vault" },
     ],
   },
   // My Estate = the plan: who gets what, read from the Vault inventory.
