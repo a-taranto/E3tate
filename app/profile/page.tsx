@@ -38,9 +38,9 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div>
       <Header title="Profile" subtitle="Your personal details, reused across your estate and will" />
-      <div className="container mx-auto px-8 py-8 max-w-3xl">
+      <div>
         {/* Where it's used */}
         <Card padding="md" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--info)" }}>
           <div className="flex items-start gap-3">

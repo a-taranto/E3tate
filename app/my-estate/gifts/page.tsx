@@ -1,5 +1,7 @@
 "use client";
 
+import Header from "@/components/layout/Header";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Button } from "@/components/ui";
@@ -55,12 +57,10 @@ export default function SpecificGiftsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Specific Gifts</h2>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Leave a specific asset to a particular person. Anything not gifted here falls into your residuary estate.
-        </p>
-      </div>
+      <Header
+        title="Specific Gifts"
+        subtitle="Leave a specific asset to a particular person. Anything not gifted here falls into your residuary estate."
+      />
 
       <Card padding="md" className="mb-6 border-l-4" style={{ borderLeftColor: "var(--info)" }}>
         <div className="flex items-start gap-3">

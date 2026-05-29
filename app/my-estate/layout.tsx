@@ -1,14 +1,7 @@
-"use client";
-
-import Header from "@/components/layout/Header";
-
-// My Estate sections are navigated from the main sidebar's "My Estate" group.
-// This layout just frames the section content.
+// My Estate sections are navigated from the main sidebar's "My Estate" group,
+// and each page renders its own <Header>. The root layout already provides the
+// page container/padding, so this layout is a simple pass-through (it only keeps
+// the /my-estate route group intact).
 export default function MyEstateLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex-1 overflow-y-auto">
-      <Header title="My Estate" subtitle="Your complete net-worth picture — update any section anytime" />
-      <div className="container mx-auto px-8 py-8 max-w-4xl">{children}</div>
-    </div>
-  );
+  return <>{children}</>;
 }
